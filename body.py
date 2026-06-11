@@ -10,6 +10,8 @@ from handlings.handling_config import ConfigMainProgram
 
 import pandas as pd
 
+from script.excel_enter import ExcelDataInserter
+
 
 def resource_path(relative_path):
     try:
@@ -300,8 +302,11 @@ class AppGui(ctk.CTk):
         try:
             self.path_outfile = None
             manager = MainLogic()
-            manager.main(self.reply_path_entry.get())
+            data_result = manager.main(self.reply_path_entry.get())
             self.path_outfile = self.reply_path_entry.get()
+
+            inserter = ExcelDataInserter(self.path_outfile)
+            inserter.insert_data(data_result, sheet_name="Изделия")
 
             self.batton_open_result_tabl.place(
                 x=self.width_path_entry + 22

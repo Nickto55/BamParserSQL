@@ -11,13 +11,6 @@ from dotenv import load_dotenv
 from handlings.handling_config import ConfigSQLRecvetions
 
 
-# Принудительно устанавливаем UTF-8 для потока вывода
-sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
-sys.stderr = io.TextIOWrapper(sys.stderr.detach(), encoding='utf-8')
-
-
-
-
 class ScriptCmd:
     def __init__(self):
         self._load_env()

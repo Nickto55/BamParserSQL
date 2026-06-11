@@ -78,9 +78,13 @@ class MainLogic:
 
 
 if __name__ == "__main__":
+    path_file = input("Введите ссылку на файл отчета: ")
     app = MainLogic()
     data = {}
-    data[""] = app.main(r"C:\Users\yakovlev_nd\Desktop\Tests\gfgdgssd\26,06,01-08,31 — копия (2).xlsx")
+    data[""] = app.main(path_file)
+    # data[""] = app.main(r"C:\Users\yakovlev_nd\Desktop\Tests\gfgdgssd\26,06,01-08,31 — копия (2).xlsx")
     print(data)
-    inserter = ExcelDataInserter(r"C:\Users\yakovlev_nd\Desktop\Tests\gfgdgssd\26,06,01-08,31 — копия (2).xlsx")
+    inserter = ExcelDataInserter(path_file)
+    # inserter = ExcelDataInserter(r"C:\Users\yakovlev_nd\Desktop\Tests\gfgdgssd\26,06,01-08,31 — копия (2).xlsx")
     inserter.insert_data(data, sheet_name="Изделия")
+    input()
