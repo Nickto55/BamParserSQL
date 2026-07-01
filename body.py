@@ -1,9 +1,11 @@
 import os.path
 import sys
-
+import threading
 import customtkinter as ctk
+import plyer
 
 from tkinter import filedialog, END
+from dse_order_manager import MainLogic
 
 import pandas as pd
 
@@ -17,9 +19,11 @@ def open_fils_to_path(name):
         return
     return filepaths
 
+
 def send_notification(title, message, settime=15):
     plyer.notification.notify(title=title, message=message, app_name="Bam Manager", timeout=settime,
-                              app_icon=resource_path(r"static/ico/bam_manager.ico"))
+                              app_icon=resource_path(r"static/ico/dse-orger-manager.ico"))
+
 
 def resource_path(relative_path):
     try:
@@ -27,6 +31,7 @@ def resource_path(relative_path):
     except Exception:
         base_path = os.path.abspath(".")
     return os.path.normpath(os.path.join(base_path, relative_path))
+
 
 class AppGui(ctk.CTk):
     def __init__(self):
@@ -37,6 +42,7 @@ class AppGui(ctk.CTk):
         ctk.set_appearance_mode("dark")
 
         self.management_window()
+        self.path_outfile = None
 
     def geomitri_constants(self):
         self.window_main_x = 700
@@ -70,6 +76,7 @@ class AppGui(ctk.CTk):
             , corner_radius=4
             , placeholder_text='Имя файла'
             , state='readonly'
+            ,border_color='#788084'
         )
         self.reply_name_entry.place(x=5, y=5)
         self.reply_name_entry.configure(text_color='#9aa5aa', state='normal')
@@ -83,6 +90,7 @@ class AppGui(ctk.CTk):
             , height=self.height_row_in_frame
             , corner_radius=4
             , placeholder_text='Введите путь к файлу/файлам отчетов'
+            , border_color='#788084'
         )
         self.reply_path_entry.place(x=self.width_name_entry + 2 * self.indent_frame, y=5)
 
@@ -92,31 +100,36 @@ class AppGui(ctk.CTk):
             , width=self.width_open_button
             , height=self.height_row_in_frame
             , command=lambda: self.button_path_commands(label_batton='reply')
+            , fg_color="#343638"
+            ,hover_color="#9aa5aa"
         )
         self.button_open_folder_reply.place(x=self.width_name_entry + self.width_path_entry + 3 * self.indent_frame,
                                             y=self.indent_frame)
 
         self.start_button = ctk.CTkButton(
             main_frame
-            , width=100
+            , width=72
             , height=self.height_row_in_frame
             , text="Начать"
             , fg_color="green"
             , hover_color="darkgreen"
             , command=self.run_manager_thread
         )
-        self.start_button.place(x=self.width_name_entry + self.width_path_entry,
-                                y=2 * self.height_row_in_frame + 2 * self.indent_frame)
+        self.start_button.place(
+            x=self.width_name_entry + self.width_path_entry + 9
+            , y=self.height_row_in_frame + 2 * self.indent_frame + 1
+        )
 
         self.batton_open_result_tabl = ctk.CTkButton(
             main_frame
-            ,width=100
-            ,height=self.height_row_in_frame
-            ,text="Открыть результат"
-            ,command=self.command_batton_open_result
-            ,fg_color='#b69765'
-            ,hover_color='#8f764f'
+            , width=100
+            , height=self.height_row_in_frame
+            , text="Открыть результат"
+            , command=self.command_batton_open_result
+            , fg_color='#b69765'
+            , hover_color='#8f764f'
         )
+
 
         logs_frame = ctk.CTkFrame(
             self
@@ -132,6 +145,35 @@ class AppGui(ctk.CTk):
         )
         self.status_text.place(x=self.indent_frame, y=self.indent_frame)
         self.status_text.insert("0.0", "Готов к запуску...\n")
+
+    def command_batton_open_result(self):
+        if not self.path_outfile is None:
+            self.start_button.configure(state="disabled")
+            self.batton_open_result_tabl.configure(fg_color='green', hover_color='darkgreen')
+
+            def merge_color():
+                self.batton_open_result_tabl.configure(fg_color='#8f764f', hover_color='#5c4b32')
+
+            self.batton_open_result_tabl.after(1000, merge_color)
+
+            try:
+
+                os.startfile(self.path_outfile)
+                self.log("-Файл открыт", color_log="#788084")
+            except Exception as e:
+                self.log(f"Ошибка при открытии файла: {e}", color_log="red")
+                self.start_button.configure(state="normal")
+                return
+
+            try:
+                send_notification(f"Файл открыт: {os.path.basename(self.path_outfile).replace('.xlsx', '')}",
+                                  "", 16)
+            except:
+                send_notification(f"Файл открыт: {os.path.basename(self.path_outfile)}", "", 16)
+            self.batton_open_result_tabl.after(5000, self.start_button.configure(state="normal"))
+        else:
+            self.log("Ошибка при открытии файла, отсссуствует путь", color_log="red")
+            self.batton_open_result_tabl.place_forget()
 
     def button_path_commands(self, label_batton: str):
         if label_batton == 'reply':
@@ -150,7 +192,9 @@ class AppGui(ctk.CTk):
             self.reply_name_entry.insert(0, os.path.basename(str_paths))
             self.reply_name_entry.configure(state='readonly')
 
+            self.start_button.configure(state="normal")
             self.log(f"<Установлен путь для файла отчетов>", color_log='#9aa5aa')
+            self.reply_path_entry.configure(border_color='#788084')
 
     def log(self, message, color_log=None):
         """Вывод логов в текстовое поле GUI с цветом"""
@@ -174,7 +218,7 @@ class AppGui(ctk.CTk):
         """Запуск в отдельном потоке, чтобы GUI не зависал"""
         self.batton_open_result_tabl.place_forget()
         self.start_button.configure(state="disabled")
-        self.log("Запуск программы...")
+
         if pd.isna(self.reply_path_entry.get()):
             self.log("Ошибка, укажите путь к файлу", color_log="red")
             self.start_button.configure(state="normal")
@@ -185,14 +229,26 @@ class AppGui(ctk.CTk):
 
     def execute_logic(self):
         self.path_outfile = None
+        if pd.isna(self.reply_path_entry.get()) or self.reply_path_entry.get() == "":
+            self.log("Введите путь к файлу", color_log='red')
+            self.reply_path_entry.configure(border_color="red")
+            self.start_button.configure(state="normal")
+
+            return
+        else:
+            self.reply_path_entry.configure(border_color='#788084')
+
+        self.log("Запуск программы...")
         try:
-            # manager = LogicManage_programm()
+            self.path_outfile = None
+            manager = MainLogic()
+            manager.main([self.reply_path_entry.get()])
+            self.path_outfile = self.reply_path_entry.get()
 
-            if hasattr(manager, 'main'):
-                self.path_outfile = manager.main()
-            self.batton_open_result_tabl.place(x=self.size_window_x - self.main_frame_pad * 2 - 140 - 5, y=110 - 30 - 5)
-
-            self.log("Complete!", color_log="green")
+            self.batton_open_result_tabl.place(
+                x=self.width_path_entry + 22
+                , y=self.height_row_in_frame + 2 * self.indent_frame + 1
+            )
             self.log("Процесс успешно завершен.", color_log="green")
             send_notification("Программа завершена", "Программа завершена, проверте файл", 16)
             self.start_button.configure(state="normal")
@@ -200,6 +256,7 @@ class AppGui(ctk.CTk):
             self.log(f"ERROR: {str(e)}", color_log="red")
         finally:
             self.start_button.configure(state="normal")
+
 
 if __name__ == "__main__":
     app = AppGui()
