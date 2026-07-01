@@ -1,3 +1,5 @@
+
+
 configProgram = {
     'program':{
         'name':'Bam Parser SQL'
@@ -19,3 +21,4 @@ configProgram = {
 
     }
 }
+

@@ -10,7 +10,6 @@ from dotenv import load_dotenv
 
 from handlings.handling_config import ConfigSQLRecvetions
 
-
 class ScriptCmd:
     def __init__(self):
         self._load_env()
@@ -18,12 +17,17 @@ class ScriptCmd:
         self.result = {}
 
     def _load_env(self):
-        load_dotenv()
+        CONFIG_DIR = os.path.join(
+            os.path.expanduser("~")
+            ,"configs"
+            ,".BamParserSQL"
+        )
+        file_path = os.path.join(CONFIG_DIR, ".env")
+        load_dotenv(dotenv_path=file_path,override=True, verbose=True)
 
         self.sql_server = os.getenv("SQL_SERVER")
         self.sql_db = os.getenv("SQL_DB")
         self.sql_exc = os.getenv("SQL_EXC")
-
 
 
     def main(self,search_dse):
@@ -74,4 +78,3 @@ class ScriptCmd:
 
 if __name__ == '__main__':
     app = ScriptCmd()
-    app.main()

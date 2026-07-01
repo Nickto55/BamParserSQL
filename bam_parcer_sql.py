@@ -9,11 +9,13 @@ import time
 
 
 class MainLogic:
-    def __init__(self):
+    def __init__(self, log_callback=None):
         self._load_env()
         self.config_program = ConfigSQLRecvetions()
+        self.log_program = log_callback
 
     def _load_env(self):
+
         load_dotenv()
 
         self.sql_server = os.getenv("SQL_SERVER")
@@ -35,20 +37,30 @@ class MainLogic:
         count_dse = 0
         start_time = time.perf_counter()
         for num_row, row_reply in self.data_input_file.items():
-            print(f'Обработка дсе: {row_reply.get('Дсе', ''):<20} ', end='')
+            self.log_program(f'Обработка дсе: {row_reply.get('Дсе', ''):<20} ')
             cmd_app = ScriptCmd()
             dse_ctr = cmd_app.main(row_reply.get('Дсе', ''))
             cmd_data.append(dse_ctr[0])
 
             count_dse += 1
 
-            print(f'прошла. |{str(count_dse):<{len(str(len(self.data_input_file)))}}/{len(self.data_input_file)}|')
+            self.log_program(f'|{str(count_dse):<{len(str(len(self.data_input_file)))}}/{len(self.data_input_file)}|')
         end_time = time.perf_counter()
         execution_time = end_time - start_time
 
         self.data = {}
-        print(cmd_data)
-        print(f"Время обращения к базе данных: {execution_time:.4f} секунд")
+
+        minutes, sec = divmod(execution_time, 60)
+        hours, minutes = divmod(minutes, 60)
+        if execution_time / 60 > 1:
+            if execution_time / 3600 >1:
+                self.log_program(f"Время обращения к базе данных: {hours:.0f} ч, {minutes:.0f} мин, {sec:.4f} сек", color_log='#9d853c')
+            else:
+                self.log_program(f"Время обращения к базе данных: {minutes:.0f} мин, {sec:.4f} сек", color_log='#8d9d3c')
+        else:
+            self.log_program(f"Время обращения к базе данных: {sec:.4f} секунд", color_log='#6e9d3c')
+
+
         for num_row, row_reply in self.data_input_file.items():
             for row_cmd in cmd_data:
                 if row_reply.get('Дсе', '') == row_cmd.get('DrawNoStr', ''):

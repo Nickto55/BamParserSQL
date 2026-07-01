@@ -3,6 +3,7 @@ import sys
 import threading
 import customtkinter as ctk
 import plyer
+import queue
 
 from tkinter import filedialog, END
 from bam_parcer_sql import MainLogic
@@ -11,7 +12,31 @@ from handlings.handling_config import ConfigMainProgram
 import pandas as pd
 
 from script.excel_enter import ExcelDataInserter
-from dotenv import load_dotenv
+from script.env_assets import HandlerEnv
+from dataclasses import fields
+
+def checking_dependencies(log_callback=None):
+    env = HandlerEnv()
+    value = []
+    for i, field in enumerate(fields(env.config)):
+        value.append(getattr(env.config, field.name))
+
+    CONFIG_DIR = os.path.join(
+        os.path.expanduser("~")
+        , "configs"
+        , ".BamParserSQL"
+    )
+    file_path = os.path.join(CONFIG_DIR, ".env")
+
+    if None in value or '' in value:
+        log_callback('.env файл пуст.', color_log='red')
+        log_callback(f'Путь к файлу: {file_path}', color_log='#ff8d52')
+        return True
+    return False
+
+
+
+
 
 def resource_path(relative_path):
     try:
@@ -65,14 +90,23 @@ class AppGui(ctk.CTk):
 
         self.management_window()
         self.path_outfile = None
+        # Очередь для сообщений из других потоков
+        self.log_queue = queue.Queue()
+
+        # Запускаем проверку очереди каждые 50 мс
+        self.check_log_queue()
+
+        checking_dependencies(log_callback=self.log)
 
 
     #     self.init_program()
     # def init_program(self):
-    #     load_dotenv()
-    #     print('sql_server', os.getenv("SQL_SERVER"))
-    #     print('sql_db', os.getenv("SQL_DB"))
-    #     print('sql_exc', os.getenv("SQL_EXC"))
+    #     self.log('start', 'red')
+    #     self.log('start', 'green')
+    #     # load_dotenv()
+    #     # print('sql_server', os.getenv("SQL_SERVER"))
+    #     # print('sql_db', os.getenv("SQL_DB"))
+    #     # print('sql_exc', os.getenv("SQL_EXC"))
 
     def geomitri_constants(self):
         self.window_main_x = int(self.config_program.get_size_config().get('window x', ''))
@@ -250,23 +284,53 @@ class AppGui(ctk.CTk):
             self.log(f"<Установлен путь для файла отчетов>", color_log='#9aa5aa')
             self.reply_path_entry.configure(border_color='#788084')
 
-    def log(self, message, color_log=None):
-        """Вывод логов в текстовое поле GUI с цветом"""
+    def check_log_queue(self):
+        """Проверяет очередь логов и выводит в GUI"""
+        try:
+            while True:
+                message, color_log = self.log_queue.get_nowait()
+                self._log_to_gui(message, color_log)
+        except queue.Empty:
+            pass
+        finally:
+            # Повторяем проверку каждые 50 мс
+            self.after(50, self.check_log_queue)
+
+    def _log_to_gui(self, message, color_log=None):
+        """Внутренний метод — вывод в текстовое поле (только из главного потока)"""
         self.status_text.insert("end", f"{message}\n")
 
         if color_log:
-            # Получаем позицию только что вставленной строки
             end_index = self.status_text.index("end-1c")
             line_num = end_index.split('.')[0]
             start_pos = f"{int(line_num) - 1}.0"
             end_pos = f"{int(line_num) - 1}.end"
-
-            # Создаём/настраиваем тег и применяем
             tag_name = f"color_{color_log}"
             self.status_text.tag_config(tag_name, foreground=color_log)
             self.status_text.tag_add(tag_name, start_pos, end_pos)
 
         self.status_text.see("end")
+
+    # def log(self, message, color_log=None):
+    #     """Вывод логов в текстовое поле GUI с цветом"""
+    #     self.status_text.insert("end", f"{message}\n")
+    #
+    #     if color_log:
+    #         # Получаем позицию только что вставленной строки
+    #         end_index = self.status_text.index("end-1c")
+    #         line_num = end_index.split('.')[0]
+    #         start_pos = f"{int(line_num) - 1}.0"
+    #         end_pos = f"{int(line_num) - 1}.end"
+    #
+    #         # Создаём/настраиваем тег и применяем
+    #         tag_name = f"color_{color_log}"
+    #         self.status_text.tag_config(tag_name, foreground=color_log)
+    #         self.status_text.tag_add(tag_name, start_pos, end_pos)
+    #
+    #     self.status_text.see("end")
+    def log(self, message, color_log=None):
+        """Публичный метод логирования — можно вызывать из любого потока"""
+        self.log_queue.put((message, color_log))
 
     def run_manager_thread(self):
         """Запуск в отдельном потоке, чтобы GUI не зависал"""
@@ -291,6 +355,8 @@ class AppGui(ctk.CTk):
 
     def execute_logic(self):
         self.path_outfile = None
+        if checking_dependencies(log_callback=self.log):
+            return
         if pd.isna(self.reply_path_entry.get()) or self.reply_path_entry.get() == "":
             self.log("Введите путь к файлу", color_log='red')
             self.reply_path_entry.configure(border_color="red")
@@ -305,16 +371,17 @@ class AppGui(ctk.CTk):
         else:
             self.reply_path_entry.configure(border_color='#788084')
 
-        self.log("Запуск программы...")
+        self.log("Начало работы...")
+
         try:
             self.path_outfile = None
-            manager = MainLogic()
+            manager = MainLogic(log_callback=self.log)
             data_result = {}
 
             data_result[""] = manager.main(self.reply_path_entry.get())
             self.path_outfile = self.reply_path_entry.get()
 
-            inserter = ExcelDataInserter(self.path_outfile)
+            inserter = ExcelDataInserter(self.path_outfile, log_callback=self.log)
             inserter.insert_data(data_result, sheet_name="Изделия")
 
             self.batton_open_result_tabl.place(
@@ -329,8 +396,11 @@ class AppGui(ctk.CTk):
                 , 16
             )
             self.start_button.configure(state="normal")
+            self.progress_bar.stop()
+            self.progress_bar.place_forget()
         except Exception as e:
-            self.log(f"ERROR: {str(e)}", color_log="red")
+            self.log(f"ERROR:", color_log="red")
+            self.log(f" {str(e)}", color_log="red")
         finally:
             self.start_button.configure(state="normal")
             # ===== ОСТАНАВЛИВАЕМ И СКРЫВАЕМ ПРОГРЕСС БАР =====
@@ -342,3 +412,4 @@ class AppGui(ctk.CTk):
 if __name__ == "__main__":
     app = AppGui()
     app.mainloop()
+    # checking_dependencies()
