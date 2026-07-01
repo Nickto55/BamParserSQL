@@ -11,7 +11,7 @@ from handlings.handling_config import ConfigMainProgram
 import pandas as pd
 
 from script.excel_enter import ExcelDataInserter
-
+from dotenv import load_dotenv
 
 def resource_path(relative_path):
     try:
@@ -65,6 +65,14 @@ class AppGui(ctk.CTk):
 
         self.management_window()
         self.path_outfile = None
+
+
+    #     self.init_program()
+    # def init_program(self):
+    #     load_dotenv()
+    #     print('sql_server', os.getenv("SQL_SERVER"))
+    #     print('sql_db', os.getenv("SQL_DB"))
+    #     print('sql_exc', os.getenv("SQL_EXC"))
 
     def geomitri_constants(self):
         self.window_main_x = int(self.config_program.get_size_config().get('window x', ''))
@@ -152,7 +160,6 @@ class AppGui(ctk.CTk):
             , hover_color='#8f764f'
         )
 
-        # ===== ПРОГРЕСС БАР =====
         self.progress_bar = ctk.CTkProgressBar(
             main_frame
             , width=self.window_main_x - 2 * self.indent_self - 2 * self.indent_frame
@@ -160,7 +167,7 @@ class AppGui(ctk.CTk):
             , corner_radius=3
             , fg_color='#2b2b2b'
             , progress_color='#00aaff'
-            , mode='indeterminate'  # бегающий (неопределённый)
+            , mode='indeterminate'
         )
         self.progress_bar.place(
             x=self.indent_frame
@@ -302,7 +309,9 @@ class AppGui(ctk.CTk):
         try:
             self.path_outfile = None
             manager = MainLogic()
-            data_result = manager.main(self.reply_path_entry.get())
+            data_result = {}
+
+            data_result[""] = manager.main(self.reply_path_entry.get())
             self.path_outfile = self.reply_path_entry.get()
 
             inserter = ExcelDataInserter(self.path_outfile)

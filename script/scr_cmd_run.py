@@ -53,8 +53,6 @@ class ScriptCmd:
             results = []
             for row in cursor.fetchall():
                 results.append(dict(zip(columns, row)))
-                print(dict(zip(columns, row)))
-
 
             self.result = results
 
