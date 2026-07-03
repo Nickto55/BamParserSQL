@@ -36,6 +36,7 @@ class MainLogic:
         cmd_data = []
         count_dse = 0
         start_time = time.perf_counter()
+        self.log_program(f'< |{str(count_dse):<{len(str(len(self.data_input_file)))}}/{len(self.data_input_file)}| >',color_log="#788084")
         for num_row, row_reply in self.data_input_file.items():
             self.log_program(f'Обработка дсе: {row_reply.get('Дсе', ''):<20} ')
             cmd_app = ScriptCmd()
@@ -44,7 +45,7 @@ class MainLogic:
 
             count_dse += 1
 
-            self.log_program(f'|{str(count_dse):<{len(str(len(self.data_input_file)))}}/{len(self.data_input_file)}|')
+            self.log_program(f'< |{str(count_dse):<{len(str(len(self.data_input_file)))}}/{len(self.data_input_file)}| >',color_log="#788084")
         end_time = time.perf_counter()
         execution_time = end_time - start_time
 

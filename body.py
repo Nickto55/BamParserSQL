@@ -1,11 +1,16 @@
 import os.path
 import sys
 import threading
+import time
+
 import customtkinter as ctk
 import plyer
 import queue
 
 from tkinter import filedialog, END
+
+from dotenv import load_dotenv
+
 from bam_parcer_sql import MainLogic
 from handlings.handling_config import ConfigMainProgram
 
@@ -99,14 +104,14 @@ class AppGui(ctk.CTk):
         checking_dependencies(log_callback=self.log)
 
 
-    #     self.init_program()
-    # def init_program(self):
-    #     self.log('start', 'red')
-    #     self.log('start', 'green')
-    #     # load_dotenv()
-    #     # print('sql_server', os.getenv("SQL_SERVER"))
-    #     # print('sql_db', os.getenv("SQL_DB"))
-    #     # print('sql_exc', os.getenv("SQL_EXC"))
+        self.init_program()
+    def init_program(self):
+        from script.scr_cmd_run import ScriptCmd
+
+        test_bd_connect = ScriptCmd(log_callback=self.log)
+        if test_bd_connect.test_connection():
+            time.sleep(2)
+            self.log("Готов к запуску...")
 
     def geomitri_constants(self):
         self.window_main_x = int(self.config_program.get_size_config().get('window x', ''))
@@ -223,7 +228,7 @@ class AppGui(ctk.CTk):
             , height=self.window_main_y - 3 * self.indent_self - self.height_main_frame - 2 * self.indent_frame
         )
         self.status_text.place(x=self.indent_frame, y=self.indent_frame)
-        self.status_text.insert("0.0", "Готов к запуску...\n")
+
 
     def command_batton_open_result(self):
         if not self.path_outfile is None:
@@ -342,13 +347,12 @@ class AppGui(ctk.CTk):
             self.start_button.configure(state="normal")
             return
 
-        # ===== ПОКАЗЫВАЕМ И ЗАПУСКАЕМ ПРОГРЕСС БАР =====
         self.progress_bar.place(
             x=self.indent_frame
             , y=self.height_main_frame - self.indent_frame - 6
         )
         self.progress_bar.start()  # запускаем анимацию
-        # ================================================
+
 
         thread = threading.Thread(target=self.execute_logic, daemon=True)
         thread.start()
@@ -362,10 +366,9 @@ class AppGui(ctk.CTk):
             self.reply_path_entry.configure(border_color="red")
             self.start_button.configure(state="normal")
 
-            # ===== СКРЫВАЕМ ПРОГРЕСС БАР =====
             self.progress_bar.stop()
             self.progress_bar.place_forget()
-            # ==================================
+
 
             return
         else:
@@ -403,10 +406,9 @@ class AppGui(ctk.CTk):
             self.log(f" {str(e)}", color_log="red")
         finally:
             self.start_button.configure(state="normal")
-            # ===== ОСТАНАВЛИВАЕМ И СКРЫВАЕМ ПРОГРЕСС БАР =====
             self.progress_bar.stop()
             self.progress_bar.place_forget()
-            # ==================================================
+
 
 
 if __name__ == "__main__":
