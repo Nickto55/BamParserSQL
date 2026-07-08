@@ -57,9 +57,9 @@ class ScriptReplyTabel:
 
 if __name__ == '__main__':
     app = ScriptReplyTabel()
-    datas = app.main(r"C:\Users\yakovlev_nd\Desktop\Tests\gfgdgssd\26,06,01-08,31.xlsx")
+    datas = app.main(r"C:/Users/yakovlev_nd/Desktop/Tests/gfgdgssd/Новая папка/26,06,01-08,31eeej — копия.xlsx")
 
     from scripts.excel_enter import ExcelDataInserter
 
-    inserter = ExcelDataInserter(r"C:\Users\yakovlev_nd\Desktop\Tests\gfgdgssd\26,06,01-08,31.xlsx")
+    inserter = ExcelDataInserter(r"C:/Users/yakovlev_nd/Desktop/Tests/gfgdgssd/Новая папка/26,06,01-08,31eeej — копия.xlsx")
     inserter.insert_data(datas, sheet_name="Изделия")

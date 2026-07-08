@@ -1,11 +1,10 @@
+import xlrd
+import openpyxl
+import pandas as pd
+
+from pathlib import Path
 from tkinter import messagebox
 from typing import Optional, Union, List, Dict, Any, Hashable
-
-import pandas as pd
-import numpy as np
-import openpyxl
-import xlrd
-from pathlib import Path
 
 
 class ExcelReader:
@@ -15,7 +14,6 @@ class ExcelReader:
     Для старых .xls файлов использует xlrd с поддержкой кодировок Windows-1251/CP866.
     """
 
-    # Популярные русские кодировки для старых Excel-файлов
     ENCODINGS = ["cp1251", "utf-8", "cp866", "koi8_r", "iso-8859-5"]
 
     def __init__(
@@ -26,6 +24,7 @@ class ExcelReader:
             , track_sheet_origin: bool = False
             , encoding: Optional[str] = None
             , header_row: int = 0
+            , skip_sheet: Optional[Union[str, int, List[Union[str, int]]]] = None
     ):
         self.file_path = file_path
         self.sheet_name = sheet_name
@@ -37,6 +36,8 @@ class ExcelReader:
         self.color_filter_column = color_filter_column
         self.track_sheet_origin = track_sheet_origin
         self.sheet_origin: Optional[str] = None
+        self.skip_sheet = skip_sheet
+        self.cell_colors: Dict[tuple, str] = {}
 
         self.load_excel()
 
@@ -74,7 +75,6 @@ class ExcelReader:
         elif ext in (".xlsx", ".xlsm"):
             return "xlsx"
         else:
-            # Пробуем определить по сигнатуре файла
             with open(file_path, "rb") as f:
                 header = f.read(8)
             if header[:8] == b'\xd0\xcf\x11\xE0\xA1\xB1\x1A\xE1':
@@ -84,12 +84,39 @@ class ExcelReader:
             else:
                 raise ValueError(f"Неизвестный формат файла: {file_path}")
 
+    def _should_skip_sheet(self, sheet_name: str, sheet_index: int) -> bool:
+        """Проверяет, нужно ли пропустить лист по имени или индексу."""
+        if self.skip_sheet is None:
+            return False
+
+        skip_list = self.skip_sheet if isinstance(self.skip_sheet, list) else [self.skip_sheet]
+
+        for skip_item in skip_list:
+            if isinstance(skip_item, int) and sheet_index == skip_item:
+                return True
+            if isinstance(skip_item, str) and sheet_name == skip_item:
+                return True
+
+        return False
+
+    def _clamp_header_row(self, max_rows: int) -> int:
+        """
+        Ограничивает header_row, чтобы он не выходил за пределы файла.
+        Если header_row >= max_rows — сбрасывает в 0.
+        """
+        if self.header_row >= max_rows:
+            print(f"[ExcelReader] WARNING: header_row={self.header_row} превышает количество строк ({max_rows}). "
+                  f"Сбрасываем в 0.")
+            return 0
+        return self.header_row
+
     def load_excel(
             self
             , file_path: Optional[str] = None
             , sheet_name: Optional[Union[str, int]] = None
             , color_filter_column: Optional[str] = None
             , encoding: Optional[str] = None
+            , skip_sheet: Optional[Union[str, int, List[Union[str, int]]]] = None
     ) -> Optional[pd.DataFrame]:
         """
         Загружает данные из Excel файла с автоматическим определением формата
@@ -101,43 +128,44 @@ class ExcelReader:
         enc = encoding or self.encoding
         hdr = self.header_row
 
-        # Определяем формат файла
+        if skip_sheet is not None:
+            self.skip_sheet = skip_sheet
+
         file_format = self._detect_format(path)
         print(f"[excel_reader] Обнаружен формат: {file_format}")
 
-        # try:
-        if file_format == "xls":
-            data = self._load_xls(path, sheet, color_col, enc, hdr)
-        else:
-            data = self._load_xlsx(path, sheet)
-
-        # Исправляем кодировку во всех строковых данных
-        if isinstance(data, pd.DataFrame):
-            data = self.fix_dataframe_encoding(data)
-        elif isinstance(data, dict):
-            for key in data:
-                if isinstance(data[key], pd.DataFrame):
-                    data[key] = self.fix_dataframe_encoding(data[key])
-
-            sheet_names = list(data.keys())
-            if sheet_names:
-                first_sheet = sheet_names[0]
-                print(f"Лист не указан. Загружаем первый лист: {first_sheet}")
-                data = data[first_sheet]
+        try:
+            if file_format == "xls":
+                data = self._load_xls(path, sheet, color_col, enc, hdr)
             else:
-                raise ValueError("Файл Excel не содержит листов.")
+                data = self._load_xlsx(path, sheet)
 
-        if file_path is None and sheet_name is None:
-            self.data = data
-            print(f"Лист успешно загружен: {sheet if sheet else 'первый лист'}")
+            if isinstance(data, pd.DataFrame):
+                data = self.fix_dataframe_encoding(data)
+            elif isinstance(data, dict):
+                for key in data:
+                    if isinstance(data[key], pd.DataFrame):
+                        data[key] = self.fix_dataframe_encoding(data[key])
 
-        return data, self.cell_colors
+                sheet_names = list(data.keys())
+                if sheet_names:
+                    first_sheet = sheet_names[0]
+                    print(f"Лист не указан. Загружаем первый лист: {first_sheet}")
+                    data = data[first_sheet]
+                else:
+                    raise ValueError("Файл Excel не содержит листов.")
 
-        # except Exception as e:
-        #     print(f"Ошибка при загрузке файла или листа: {e}")
-        #     if file_path is None and sheet_name is None:
-        #         self.data = None
-        #     return None
+            if file_path is None and sheet_name is None:
+                self.data = data
+                print(f"Лист успешно загружен: {sheet if sheet else 'первый лист'}")
+
+            return data, self.cell_colors
+
+        except Exception as e:
+            print(f"Ошибка при загрузке файла или листа: {e}")
+            if file_path is None and sheet_name is None:
+                self.data = None
+            return None
 
     def _load_xls(self, path: str, sheet: Optional[Union[str, int]],
                   color_col: Optional[str], encoding: Optional[str],
@@ -153,7 +181,6 @@ class ExcelReader:
         used_encoding = None
         last_error = None
 
-        # === ПОПЫТКА 1: Принудительная кодировка, если указана ===
         if encoding:
             try:
                 workbook = xlrd.open_workbook(path, encoding_override=encoding)
@@ -164,7 +191,6 @@ class ExcelReader:
                 last_error = e
                 workbook = None
 
-        # === ПОПЫТКА 2: Автоподбор кодировки из списка ENCODINGS ===
         if workbook is None:
             for enc in self.ENCODINGS:
                 try:
@@ -185,19 +211,30 @@ class ExcelReader:
             except Exception as e:
                 raise ValueError(f"Не удалось открыть .xls файл. Последняя ошибка: {last_error}")
 
-        # === ВЫБОР ЛИСТА ===
-        if sheet is None:
-            sheet_idx = 0
-            self.sheet_origin = workbook.sheet_names()[0]
-        elif isinstance(sheet, int):
-            sheet_idx = sheet
-            self.sheet_origin = workbook.sheet_names()[sheet]
+        available_sheets = workbook.sheet_names()
+
+        if sheet is not None:
+            if isinstance(sheet, int):
+                sheet_idx = sheet
+                self.sheet_origin = available_sheets[sheet]
+            else:
+                sheet_idx = available_sheets.index(sheet)
+                self.sheet_origin = sheet
         else:
-            sheet_idx = workbook.sheet_names().index(sheet)
-            self.sheet_origin = sheet
+            sheet_idx = None
+            for idx, s_name in enumerate(available_sheets):
+                if not self._should_skip_sheet(s_name, idx):
+                    sheet_idx = idx
+                    self.sheet_origin = s_name
+                    print(f"[ExcelReader] Пропущены листы: {self.skip_sheet}. Загружен первый доступный: {s_name}")
+                    break
+
+            if sheet_idx is None:
+                raise ValueError(f"Все листы исключены (skip_sheet={self.skip_sheet}). Нет доступных листов.")
 
         ws = workbook.sheet_by_index(sheet_idx)
 
+        effective_header = self._clamp_header_row(ws.nrows)
 
         data = []
         for row_idx in range(ws.nrows):
@@ -211,12 +248,12 @@ class ExcelReader:
             data.append(row_data)
 
 
-        if header_row is not None and header_row < len(data):
-            headers = data[header_row]
+        if effective_header is not None and effective_header < len(data):
+            headers = data[effective_header]
             for i, h in enumerate(headers):
                 if pd.isna(h) or h == '' or h is None or str(h).strip() == '':
                     headers[i] = f'Unnamed: {i}'
-            df_data = data[header_row + 1:]
+            df_data = data[effective_header + 1:]
             df = pd.DataFrame(df_data, columns=headers)
         else:
             df = pd.DataFrame(data)
@@ -231,25 +268,66 @@ class ExcelReader:
     def _load_xlsx(self, path: str, sheet: Optional[Union[str, int]]) -> pd.DataFrame:
 
         """Загружает .xlsx через openpyxl/pandas."""
-        return self._load_xlsx_with_colors(path, sheet )
+        return self._load_xlsx_with_colors(path, sheet)
 
 
     def _load_xlsx_with_colors(self, path: str, sheet: Optional[Union[str, int]]) -> pd.DataFrame:
         """Загружает данные и собирает цвета всех ячеек."""
 
-        raw_data = pd.read_excel(path, sheet_name=sheet, header=self.header_row)
+        # === ЗАЩИТА: проверяем header_row перед чтением ===
+        # Сначала узнаём реальное количество строк в листе
+        try:
+            wb_check = openpyxl.load_workbook(path, data_only=True)
+            if sheet is None:
+                ws_check = wb_check.active
+            elif isinstance(sheet, int):
+                ws_check = wb_check.worksheets[sheet]
+            else:
+                ws_check = wb_check[sheet]
+            max_rows = ws_check.max_row
+            wb_check.close()
+        except Exception:
+            max_rows = 999999
 
-        # Если вернулся словарь (несколько листов или sheet=None) — берём первый
+        effective_header = self._clamp_header_row(max_rows) if max_rows < 999999 else self.header_row
+
+        try:
+            raw_data = pd.read_excel(path, sheet_name=sheet, header=effective_header)
+        except ValueError as e:
+            if "Passed header=" in str(e) and "but only" in str(e):
+                print(f"[ExcelReader] WARNING: {e}. Пробуем с header=0.")
+                raw_data = pd.read_excel(path, sheet_name=sheet, header=0)
+            else:
+                raise
+
         if isinstance(raw_data, dict):
+            if self.skip_sheet is not None:
+                skip_list = self.skip_sheet if isinstance(self.skip_sheet, list) else [self.skip_sheet]
+                filtered_sheets = {}
+                for s_name, s_df in raw_data.items():
+                    try:
+                        wb_temp = openpyxl.load_workbook(path, data_only=True)
+                        sheet_names = wb_temp.sheetnames
+                        wb_temp.close()
+                        s_idx = sheet_names.index(s_name)
+                    except:
+                        s_idx = -1
+
+                    if s_name not in skip_list and s_idx not in skip_list:
+                        filtered_sheets[s_name] = s_df
+                    else:
+                        print(f"[ExcelReader] Пропущен лист: {s_name}")
+
+                raw_data = filtered_sheets
+
             sheet_names = list(raw_data.keys())
             if sheet_names:
                 first_sheet = sheet_names[0]
                 print(f"[ExcelReader] Лист не указан. Загружаем первый лист: {first_sheet}")
                 df = raw_data[first_sheet]
-                # Запоминаем имя для openpyxl
                 sheet_for_colors = first_sheet
             else:
-                raise ValueError("Файл Excel не содержит листов.")
+                raise ValueError("Файл Excel не содержит листов (все исключены).")
         else:
             df = raw_data
             sheet_for_colors = sheet
@@ -258,7 +336,6 @@ class ExcelReader:
 
         wb = openpyxl.load_workbook(path, data_only=True)
 
-        # Определяем лист
         if sheet_for_colors is None:
             ws = wb.active
             self.sheet_origin = ws.title
@@ -269,12 +346,10 @@ class ExcelReader:
             ws = wb[sheet_for_colors]
             self.sheet_origin = sheet_for_colors
 
-        excel_header_row = self.header_row + 1
+        excel_header_row = effective_header + 1
 
-        # Словарь цветов: {(row, col_name): hex_color}
         self.cell_colors = {}
 
-        # Получаем имена колонок для маппинг
         columns = list(df.columns)
 
         for row_idx in range(excel_header_row + 1, ws.max_row + 1):
@@ -287,7 +362,7 @@ class ExcelReader:
                     if rgb and rgb not in ('00000000', 'FFFFFFFF', None):
                         color = str(rgb)
 
-                if color:  # Сохраняем только если есть цвет
+                if color:
                     col_name = columns[col_idx - 1]
                     self.cell_colors[(row_idx, col_name)] = color
 
@@ -395,16 +470,58 @@ class ExcelReader:
 class MultiSheetReader:
     """Класс для чтения нескольких листов из одного Excel-файла."""
 
-    def __init__(self, file_path: str):
+    def __init__(self, file_path: str, skip_sheets: Optional[Union[str, int, List[Union[str, int]]]] = None):
         self.file_path = file_path
         self.sheets: Dict[str, Optional[pd.DataFrame]] = {}
+        self.skip_sheets = skip_sheets
 
-    def load_sheets(self, sheet_names: List[str]) -> Dict[str, Optional[pd.DataFrame]]:
-        """Загружает указанные листы из Excel-файла."""
+    def _should_skip(self, sheet_name: str, sheet_index: int) -> bool:
+        """Проверяет, нужно ли пропустить лист."""
+        if self.skip_sheets is None:
+            return False
+
+        skip_list = self.skip_sheets if isinstance(self.skip_sheets, list) else [self.skip_sheets]
+
+        for skip_item in skip_list:
+            if isinstance(skip_item, int) and sheet_index == skip_item:
+                return True
+            if isinstance(skip_item, str) and sheet_name == skip_item:
+                return True
+
+        return False
+
+    def load_sheets(self, sheet_names: Optional[List[str]] = None) -> Dict[str, Optional[pd.DataFrame]]:
+        """
+        Загружает указанные листы из Excel-файла.
+        Если sheet_names не указан — загружает все листы кроме skip_sheets.
+        """
+        try:
+            xl = pd.ExcelFile(self.file_path)
+            all_sheet_names = xl.sheet_names
+        except Exception as e:
+            print(f"Ошибка при открытии файла: {e}")
+            return {}
+
+        if sheet_names is None:
+            sheet_names = []
+            for idx, name in enumerate(all_sheet_names):
+                if not self._should_skip(name, idx):
+                    sheet_names.append(name)
+                else:
+                    print(f"[MultiSheetReader] Пропущен лист: {name}")
+        else:
+            filtered = []
+            for idx, name in enumerate(all_sheet_names):
+                if name in sheet_names and not self._should_skip(name, idx):
+                    filtered.append(name)
+                elif name in sheet_names and self._should_skip(name, idx):
+                    print(f"[MultiSheetReader] Пропущен лист: {name}")
+            sheet_names = filtered
+
         for sheet_name in sheet_names:
             try:
                 data = pd.read_excel(self.file_path, sheet_name=sheet_name)
-                # Исправляем кодировку
+
                 data = ExcelReader.fix_dataframe_encoding(data)
                 self.sheets[sheet_name] = data
             except Exception as e:

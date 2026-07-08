@@ -28,14 +28,14 @@ class ExcelDataInserter:
                         извлекаются автоматически из данных)
         :return: Путь к сохранённому файлу
         """
-        # Удаляем лист, если он уже существует
+
         if sheet_name in self.wb.sheetnames:
             del self.wb[sheet_name]
 
-        # Создаём новый лист
+
         ws = self.wb.create_sheet(title=sheet_name)
 
-        # Определяем заголовки из структуры данных, если не переданы явно
+
         if headers is None:
             first_item = None
             for product_key, product_value in data.items():
@@ -46,7 +46,7 @@ class ExcelDataInserter:
                     break
             headers = list(first_item.keys()) if first_item else []
 
-        # Записываем заголовки (первая строка)
+
         for col_idx, header in enumerate(headers, 1):
             cell = ws.cell(row=1, column=col_idx, value=header)
             cell.fill = self.fill_color1
@@ -55,7 +55,6 @@ class ExcelDataInserter:
         ws.auto_filter.ref = f"A1:{get_column_letter(len(header))}1"
 
 
-        # Записываем данные
         row_idx = 2
         for product_key, product_value in data.items():
             for detail_key, detail_value in product_value.items():
@@ -63,7 +62,6 @@ class ExcelDataInserter:
                     ws.cell(row=row_idx, column=col_idx, value=detail_value.get(header, ''))
                 row_idx += 1
 
-        # Автоширина столбцов
         for col_idx in range(1, len(headers) + 1):
             max_length = 0
             column_letter = get_column_letter(col_idx)
@@ -77,7 +75,7 @@ class ExcelDataInserter:
             ws.column_dimensions[column_letter].width = adjusted_width
 
         self.wb.freeze_panes = 'A2'
-        # Сохраняем файл
+
         self.wb.save(self.file_path)
         return self.file_path
 

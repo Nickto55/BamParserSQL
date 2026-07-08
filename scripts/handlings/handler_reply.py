@@ -1,5 +1,5 @@
-import sys
 import os
+import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -15,7 +15,7 @@ class HandlerReplyTabel:
         """
         return: Обычн
         """
-        self.read_excel= ExcelReader(path_to_reply_tabel, header_row=13)
+        self.read_excel= ExcelReader(path_to_reply_tabel, header_row=13, skip_sheet='Изделия')
         self.filter_data()
 
 

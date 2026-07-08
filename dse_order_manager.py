@@ -1,4 +1,3 @@
-import os
 from scripts.excel_enter import ExcelDataInserter
 from scripts.reply_script import ScriptReplyTabel
 

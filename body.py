@@ -1,13 +1,13 @@
-import os.path
 import sys
-import threading
-import customtkinter as ctk
 import plyer
+import os.path
+import threading
+import pandas as pd
+import customtkinter as ctk
 
 from tkinter import filedialog, END
 from dse_order_manager import MainLogic
 
-import pandas as pd
 
 
 def open_fils_to_path(name):
@@ -92,7 +92,10 @@ class AppGui(ctk.CTk):
             , placeholder_text='Введите путь к файлу/файлам отчетов'
             , border_color='#788084'
         )
-        self.reply_path_entry.place(x=self.width_name_entry + 2 * self.indent_frame, y=5)
+        self.reply_path_entry.place(
+            x=self.width_name_entry + 2 * self.indent_frame
+            , y=5
+        )
 
         self.button_open_folder_reply = ctk.CTkButton(
             main_frame
@@ -103,8 +106,10 @@ class AppGui(ctk.CTk):
             , fg_color="#343638"
             ,hover_color="#9aa5aa"
         )
-        self.button_open_folder_reply.place(x=self.width_name_entry + self.width_path_entry + 3 * self.indent_frame,
-                                            y=self.indent_frame)
+        self.button_open_folder_reply.place(
+            x=self.width_name_entry + self.width_path_entry + 3 * self.indent_frame,
+            y=self.indent_frame
+        )
 
         self.start_button = ctk.CTkButton(
             main_frame
@@ -136,14 +141,20 @@ class AppGui(ctk.CTk):
             , width=self.window_main_x - 2 * self.indent_self
             , height=self.window_main_y - 3 * self.indent_self - self.height_main_frame
         )
-        logs_frame.place(x=self.indent_self, y=2 * self.indent_self + self.height_main_frame)
+        logs_frame.place(
+            x=self.indent_self
+            , y=2 * self.indent_self + self.height_main_frame
+        )
 
         self.status_text = ctk.CTkTextbox(
             logs_frame
             , width=self.window_main_x - 2 * self.indent_self - 2 * self.indent_frame
             , height=self.window_main_y - 3 * self.indent_self - self.height_main_frame - 2 * self.indent_frame
         )
-        self.status_text.place(x=self.indent_frame, y=self.indent_frame)
+        self.status_text.place(
+            x=self.indent_frame,
+            y=self.indent_frame
+        )
         self.status_text.insert("0.0", "Готов к запуску...\n")
 
     def command_batton_open_result(self):
@@ -177,7 +188,6 @@ class AppGui(ctk.CTk):
 
     def button_path_commands(self, label_batton: str):
         if label_batton == 'reply':
-            # noinspection PyTypeChecker
             path_list_filr = list(open_fils_to_path(name='отчетов'))
 
             str_paths = ""
@@ -201,13 +211,11 @@ class AppGui(ctk.CTk):
         self.status_text.insert("end", f"{message}\n")
 
         if color_log:
-            # Получаем позицию только что вставленной строки
             end_index = self.status_text.index("end-1c")
             line_num = end_index.split('.')[0]
             start_pos = f"{int(line_num) - 1}.0"
             end_pos = f"{int(line_num) - 1}.end"
 
-            # Создаём/настраиваем тег и применяем
             tag_name = f"color_{color_log}"
             self.status_text.tag_config(tag_name, foreground=color_log)
             self.status_text.tag_add(tag_name, start_pos, end_pos)
@@ -239,23 +247,23 @@ class AppGui(ctk.CTk):
             self.reply_path_entry.configure(border_color='#788084')
 
         self.log("Запуск программы...")
-        try:
-            self.path_outfile = None
-            manager = MainLogic()
-            manager.main([self.reply_path_entry.get()])
-            self.path_outfile = self.reply_path_entry.get()
+        # try:
+        self.path_outfile = None
+        manager = MainLogic()
+        manager.main([self.reply_path_entry.get()])
+        self.path_outfile = self.reply_path_entry.get()
 
-            self.batton_open_result_tabl.place(
-                x=self.width_path_entry + 22
-                , y=self.height_row_in_frame + 2 * self.indent_frame + 1
-            )
-            self.log("Процесс успешно завершен.", color_log="green")
-            send_notification("Программа завершена", "Программа завершена, проверте файл", 16)
-            self.start_button.configure(state="normal")
-        except Exception as e:
-            self.log(f"ERROR: {str(e)}", color_log="red")
-        finally:
-            self.start_button.configure(state="normal")
+        self.batton_open_result_tabl.place(
+            x=self.width_path_entry + 22
+            , y=self.height_row_in_frame + 2 * self.indent_frame + 1
+        )
+        self.log("Процесс успешно завершен.", color_log="green")
+        send_notification("Программа завершена", "Программа завершена, проверте файл", 16)
+        self.start_button.configure(state="normal")
+        # except Exception as e:
+        #     self.log(f"ERROR: {str(e)}", color_log="red")
+        # finally:
+        #     self.start_button.configure(state="normal")
 
 
 if __name__ == "__main__":
