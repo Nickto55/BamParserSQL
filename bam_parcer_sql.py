@@ -1,11 +1,13 @@
 import os
+import time
+
+from CTkMessagebox import CTkMessagebox
 from dotenv import load_dotenv
 
 from handlings.handling_config import ConfigSQLRecvetions
 from script.excel_enter import ExcelDataInserter
 from script.excel_reader import ExcelReader
 from script.scr_cmd_run import ScriptCmd
-import time
 
 
 class MainLogic:
@@ -13,6 +15,7 @@ class MainLogic:
         self._load_env()
         self.config_program = ConfigSQLRecvetions()
         self.log_program = log_callback
+        self.no_repeat = False
 
     def _load_env(self):
 
@@ -35,47 +38,80 @@ class MainLogic:
     def filter_data(self):
         cmd_data = []
         count_dse = 0
-        start_time = time.perf_counter()
-        self.log_program(f'< |{str(count_dse):<{len(str(len(self.data_input_file)))}}/{len(self.data_input_file)}| >',color_log="#788084")
-        for num_row, row_reply in self.data_input_file.items():
-            self.log_program(f'Обработка дсе: {row_reply.get('Дсе', ''):<20} ')
-            cmd_app = ScriptCmd()
-            dse_ctr = cmd_app.main(row_reply.get('Дсе', ''))
-            cmd_data.append(dse_ctr[0])
 
-            count_dse += 1
+        estimated_processing_time_for_one_request = 385  # среднее время на обработку одного запроса, в мсек
+        estimated_running_program = (len(self.data_input_file) * estimated_processing_time_for_one_request) / 10 # предполагаемое время работы программы
 
-            self.log_program(f'< |{str(count_dse):<{len(str(len(self.data_input_file)))}}/{len(self.data_input_file)}| >',color_log="#788084")
-        end_time = time.perf_counter()
-        execution_time = end_time - start_time
+        self.time_transformations(
+            estimated_running_program
+            , 'Расчетное время работы программы'
+            , '#F39741'
+        )
 
-        self.data = {}
+        if estimated_running_program/60 >= 30:
+            if CTkMessagebox(
+                title="Продолжить?"
+                , message="Предполагаемое время работы программы, превышает 30 мин.\nЖелаете ли вы продолжить запуск"
+                , option_2='Да'
+                , option_1='Нет'
+            ).get() == 'Нет':
+                self.no_repeat = True
 
-        minutes, sec = divmod(execution_time, 60)
+        if not self.no_repeat:
+            self.log_program(
+                f'< |{str(count_dse):<{len(str(len(self.data_input_file)))}}/{len(self.data_input_file)}| >'
+                , color_log="#847E78"
+            )
+
+            start_time = time.perf_counter()
+            count_time_to_dse = 0.0
+            for num_row, row_reply in self.data_input_file.items():
+                stat_time_to_one_request = time.perf_counter()
+                self.log_program(f'Обработка дсе: {row_reply.get('Дсе', ''):<20} ')
+                cmd_app = ScriptCmd()
+                dse_ctr = cmd_app.main(row_reply.get('Дсе', ''))
+                cmd_data.append(dse_ctr[0])
+
+                count_dse += 1
+
+                self.log_program(f'< |{str(count_dse):<{len(str(len(self.data_input_file)))}}/{len(self.data_input_file)}| >',color_log="#788084")
+
+                count_time_to_dse += time.perf_counter() - stat_time_to_one_request
+                remaining_time = (count_time_to_dse/count_dse)*(len(self.data_input_file)-count_dse)
+                self.time_transformations(remaining_time, 'До завершения', '#F39741')
+            end_time = time.perf_counter()
+            execution_time = end_time - start_time
+
+            self.data = {}
+
+            self.time_transformations(execution_time, 'Время обращения к базе данных', '#6e9d3c')
+
+            for num_row, row_reply in self.data_input_file.items():
+                for row_cmd in cmd_data:
+                    if row_reply.get('Дсе', '') == row_cmd.get('DrawNoStr', '') and not self.no_repeat:
+                        row_reply.update(
+                            {
+                                "ТП не в архиве": row_cmd.get('TPNoArch', '')
+                                , "ДСЕ без маршрутов": row_cmd.get('TPNoRoot', '')
+                                , "ДСЕ без основного материала": row_cmd.get('TPNoMat', '')
+                                , "Дсе без трудоемкости": row_cmd.get('TPNoLabor', '')
+                                , "Всего нет УП": row_cmd.get('TPNoYP', '')
+                                , "Наименование изделия (ИС)": row_cmd.get('ShortName', '')
+                            }
+                        )
+                    self.data[row_reply.get('Дсе', '')] = row_reply
+
+
+    def time_transformations(self, sekunds_inp, text_log, color_text):
+        minutes, sec = divmod(sekunds_inp, 60)
         hours, minutes = divmod(minutes, 60)
-        if execution_time / 60 > 1:
-            if execution_time / 3600 >1:
-                self.log_program(f"Время обращения к базе данных: {hours:.0f} ч, {minutes:.0f} мин, {sec:.4f} сек", color_log='#9d853c')
+        if sekunds_inp / 60 > 1:
+            if sekunds_inp / 3600 > 1:
+                self.log_program(f"{text_log}: {hours:.0f} ч, {minutes:.0f} мин, {sec:.4f} сек", color_log=color_text)
             else:
-                self.log_program(f"Время обращения к базе данных: {minutes:.0f} мин, {sec:.4f} сек", color_log='#8d9d3c')
+                self.log_program(f"{text_log}: {minutes:.0f} мин, {sec:.4f} сек", color_log=color_text)
         else:
-            self.log_program(f"Время обращения к базе данных: {sec:.4f} секунд", color_log='#6e9d3c')
-
-
-        for num_row, row_reply in self.data_input_file.items():
-            for row_cmd in cmd_data:
-                if row_reply.get('Дсе', '') == row_cmd.get('DrawNoStr', ''):
-                    row_reply.update(
-                        {
-                            "ТП не в архиве": row_cmd.get('TPNoArch', '')
-                            , "ДСЕ без маршрутов": row_cmd.get('TPNoRoot', '')
-                            , "ДСЕ без основного материала": row_cmd.get('TPNoMat', '')
-                            , "Дсе без трудоемкости": row_cmd.get('TPNoLabor', '')
-                            , "Всего нет УП": row_cmd.get('TPNoYP', '')
-                            , "Наименование изделия (ИС)": row_cmd.get('ShortName', '')
-                        }
-                    )
-                self.data[row_reply.get('Дсе', '')] = row_reply
+            self.log_program(f"{text_log}: {sec:.4f} секунд", color_log=color_text)
 
 
 if __name__ == "__main__":
