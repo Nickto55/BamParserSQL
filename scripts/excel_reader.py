@@ -274,8 +274,6 @@ class ExcelReader:
     def _load_xlsx_with_colors(self, path: str, sheet: Optional[Union[str, int]]) -> pd.DataFrame:
         """Загружает данные и собирает цвета всех ячеек."""
 
-        # === ЗАЩИТА: проверяем header_row перед чтением ===
-        # Сначала узнаём реальное количество строк в листе
         try:
             wb_check = openpyxl.load_workbook(path, data_only=True)
             if sheet is None:

@@ -32,6 +32,7 @@ MANIFEST
 *.manifest
 *.spec
 
+test_app.py
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
@@ -151,6 +152,7 @@ activemq-data/
 .env
 .envrc
 .venv
+.idea
 env/
 venv/
 ENV/

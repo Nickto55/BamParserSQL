@@ -1,8 +1,8 @@
 from scripts.excel_enter import ExcelDataInserter
 from scripts.reply_script import ScriptReplyTabel
 
-class MainLogic:
-    def __init__(self):
+class DseOrderLogic:
+    def __init__(self, log_callback=None):
         self.list_path_to_replacce_tabel = None
 
     def main(self, list_path_to_replacce_tabel: list):

@@ -1,7 +1,4 @@
 import json
-
-import sys
-import io
 import pyodbc
 
 
@@ -22,7 +19,6 @@ class ScriptCmd:
         Проверяет соединение с SQL-сервером.
         Возвращает True в случае успеха, False при ошибке.
         """
-        # На всякий случай обновляем переменные окружения
         self._load_env()
 
         conn_str = (

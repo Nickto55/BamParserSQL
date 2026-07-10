@@ -46,7 +46,6 @@ class HandlerEnv:
         self.config: EnvConfig = self._load()
         self._sync_with_template()
 
-    # ── Публичные методы ──
 
     def save(self) -> None:
         """Сохраняет конфиг в .env формате KEY='VALUE'."""
@@ -54,7 +53,6 @@ class HandlerEnv:
         with open(self.file_path, 'w', encoding='utf-8') as f:
             for field in fields(self.config):
                 value = getattr(self.config, field.name)
-                # Экранируем одинарные кавычки в значении
                 safe_value = str(value).replace("'", "\\'")
                 f.write(f"{field.name}='{safe_value}'\n")
         print(f"Конфиг сохранён: {self.file_path}")
@@ -74,8 +72,6 @@ class HandlerEnv:
 
             return False, self.config.get_missing_fields()
         return True, []
-
-    # ── Приватные методы ──
 
     def _migrate_old_config(self) -> None:
         """Переносит конфиг из старого расположения."""
@@ -114,7 +110,6 @@ class HandlerEnv:
                     if not line or line.startswith('#'):
                         continue
 
-                    # Парсим KEY='VALUE' или KEY="VALUE" или KEY=VALUE
                     if '=' not in line:
                         print(f"Пропускаю строку {line_num}: нет '='")
                         continue
@@ -122,7 +117,6 @@ class HandlerEnv:
                     key, value = line.split('=', 1)
                     key = key.strip()
 
-                    # Убираем кавычки
                     value = value.strip()
                     if (value.startswith("'") and value.endswith("'")) or \
                             (value.startswith('"') and value.endswith('"')):
@@ -139,7 +133,6 @@ class HandlerEnv:
             self._ensure_file_exists()
             return self.DEFAULT_CONFIG
 
-        # Фильтруем только валидные поля
         valid_keys = {f.name for f in fields(EnvConfig)}
         filtered = {k: v for k, v in raw_data.items() if k in valid_keys}
 
@@ -166,10 +159,6 @@ class HandlerEnv:
             self.config = EnvConfig(**current_dict)
             self.save()
 
-
-# ═══════════════════════════════════════
-# GUI
-# ═══════════════════════════════════════
 
 import tkinter as tk
 from tkinter import messagebox

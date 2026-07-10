@@ -4,7 +4,7 @@ configProgram = {
     'program':{
         'name':'Bam Parser SQL'
         , 'size':{
-            'window x':'750'
+            'window x':'990'
             ,'window y':'420'
             ,'indent self':15
             ,'indent frame': 5

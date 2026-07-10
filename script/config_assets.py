@@ -1,8 +1,6 @@
 import json
 import os
 import shutil
-import tkinter as tk
-from tkinter import messagebox, filedialog
 
 from static.config import configProgram
 
@@ -75,12 +73,10 @@ class HandlerConfig:
                     current_path = f"{path}.{key}" if path else key
 
                     if key not in current:
-                        # Ключ отсутствует — добавляем из шаблона
                         print(f"Recovery: missing key '{current_path}' added")
                         current[key] = template_value
                         changes_made = True
                     else:
-                        # Ключ есть — рекурсивно проверяем вложенные структуры
                         if isinstance(template_value, (dict, list)):
                             new_value, nested_changed = _merge_missing(
                                 current[key], template_value, current_path
@@ -88,28 +84,23 @@ class HandlerConfig:
                             if nested_changed:
                                 current[key] = new_value
                                 changes_made = True
-                        # Если значение примитивное и отличается от шаблона —
-                        # оставляем текущее (пользовательское значение)
 
             elif isinstance(template, list):
                 if not isinstance(current, list):
                     print(f"Recovery: replacing non-list at '{path}' with template list")
                     return template, True
 
-                # Для списков: если текущий пуст, а шаблон нет — копируем шаблон
                 if len(current) == 0 and len(template) > 0:
                     print(f"Recovery: empty list at '{path}' filled from template")
                     return template, True
 
             return current, changes_made
 
-        # Создаём копию текущих данных для сравнения
+
         original_data = json.dumps(self.data, sort_keys=True)
 
-        # Запускаем восстановление
         self.data, was_changed = _merge_missing(self.data, configProgram.copy())
 
-        # Проверяем, были ли изменения
         new_data = json.dumps(self.data, sort_keys=True)
         if new_data != original_data:
             print("Recovery: changes detected, saving...")
