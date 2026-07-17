@@ -336,12 +336,13 @@ class AppGui(ctk.CTk):
             , text='Прекратить, сохранить результат'
             , fg_color='#a93c22'
             , hover_color='#752917'
-            , command=self.stop_execution  # БЕЗ скобок!
+            , command=self.stop_execution
         )
         self.button_stop_program.place(
             x=415
             , y=self.height_row_in_frame + 2 * self.indent_frame + 1
         )
+        self.button_stop_program.place_forget()
 
         self.progress_bar = ctk.CTkProgressBar(
             main_frame
@@ -378,7 +379,7 @@ class AppGui(ctk.CTk):
         """Отправляет сигнал остановки в рабочий поток"""
         self.stop_event.set()
         self.log("Отправлен сигнал остановки...", color_log="orange")
-        self.button_stop_program.configure(state="disabled", text="Остановка...")
+        self.button_stop_program.place_forget()
 
     def command_button_open_work(self):
         if self.bool_button_tabel_window:
@@ -531,9 +532,9 @@ class AppGui(ctk.CTk):
 
     def run_manager_thread(self):
         """Запуск в отдельном потоке, чтобы GUI не зависал"""
+        self.status_text.delete("1.0", END)
         self.button_open_result_tabel.place_forget()
         self.start_button.configure(state="disabled")
-        self.button_stop_program.configure(state="normal", text='Прекратить, сохранить результат')
         self.stop_event.clear()
 
         if pd.isna(self.reply_path_entry.get()):
@@ -566,63 +567,69 @@ class AppGui(ctk.CTk):
             self.reply_path_entry.configure(border_color='#788084')
             self.reply_name_entry.configure(border_color='#788084')
 
-        self.log("Начало работы...")
+        self.log("\nНачало работы...")
+        self.button_stop_program.place(
+            x=415
+            , y=self.height_row_in_frame + 2 * self.indent_frame + 1
+        )
 
-        try:
-            self.path_outfile = None
-            if self.checkbox_dse_order.get() and self.checkbox_bam_parser.get():
-                manager = EngineLogic(
-                    log_callback=self.log,
-                    table_callback=self.table_callback,
-                    stop_event=self.stop_event
-                )
-                manager.main(self.reply_path_entry.get())
-            elif self.checkbox_dse_order.get() and not self.checkbox_bam_parser.get():
-                manager = DseOrderLogic()
-                manager.main(self.reply_path_entry.get())
-            elif not self.checkbox_dse_order.get() and self.checkbox_bam_parser.get():
-                manager = SqlParserLogic(
-                    log_callback=self.log,
-                    table_callback=self.table_callback,
-                    stop_event=self.stop_event
-                )
-                manager.main(self.reply_path_entry.get())
-            else:
-                self.log(f'Произошла ошибка: {self.checkbox_dse_order.get()} {self.checkbox_bam_parser.get()}')
+        # try:
+        self.path_outfile = None
+        if self.checkbox_dse_order.get() and self.checkbox_bam_parser.get():
+            manager = EngineLogic(
+                log_callback=self.log,
+                table_callback=self.table_callback,
+                stop_event=self.stop_event
+            )
+            manager.main(self.reply_path_entry.get())
+        elif self.checkbox_dse_order.get() and not self.checkbox_bam_parser.get():
+            manager = DseOrderLogic()
+            manager.main(self.reply_path_entry.get())
+        elif not self.checkbox_dse_order.get() and self.checkbox_bam_parser.get():
+            manager = SqlParserLogic(
+                log_callback=self.log,
+                table_callback=self.table_callback,
+                stop_event=self.stop_event
+            )
+            manager.main(self.reply_path_entry.get())
+        else:
+            self.log(f'Произошла ошибка: {self.checkbox_dse_order.get()} {self.checkbox_bam_parser.get()}')
 
-            if self.checkbox_result.get():
-                result = TableTransformation(self.reply_path_entry.get())
-                result.main()
-            self.path_outfile = self.reply_path_entry.get()
-            self.button_open_result_tabel.place(
-                x=self.width_path_entry + 22
-                , y=self.height_row_in_frame + 2 * self.indent_frame + 1
+        if self.checkbox_result.get():
+            result = TableTransformation(self.reply_path_entry.get())
+            result.main()
+        self.path_outfile = self.reply_path_entry.get()
+        self.button_open_result_tabel.place(
+            x=self.width_path_entry + 22
+            , y=self.height_row_in_frame + 2 * self.indent_frame + 1
+        )
+
+        if self.stop_event.is_set():
+            self.log("Процесс остановлен пользователем. Результат сохранён.", color_log="orange")
+            self.button_open_folder_reply.place(x=self.width_name_entry + self.width_path_entry + 3 * self.indent_frame,
+                                                y=self.indent_frame)
+        else:
+            self.log("Процесс успешно завершен.", color_log="green")
+            self.button_open_folder_reply.place(x=self.width_name_entry + self.width_path_entry + 3 * self.indent_frame,
+                                                y=self.indent_frame)
+            send_notification(
+                "Программа завершена"
+                , "Программа завершена , проверте файл"
+                , self.name_program
+                , 16
             )
 
-            if self.stop_event.is_set():
-                self.log("Процесс остановлен пользователем. Результат сохранён.", color_log="orange")
-            else:
-                self.log("Процесс успешно завершен.", color_log="green")
-                send_notification(
-                    "Программа завершена"
-                    , "Программа завершена , проверте файл"
-                    , self.name_program
-                    , 16
-                )
+        self.start_button.configure(state="normal")
+        self.progress_bar.stop()
+        self.progress_bar.place_forget()
 
-            self.start_button.configure(state="normal")
-            self.progress_bar.stop()
-            self.progress_bar.place_forget()
-            self.button_stop_program.configure(state="normal", text='Прекратить, сохранить результат')
-
-        except Exception as e:
-            self.log(f"\nERROR GUI:", color_log="red")
-            self.log(f" {str(e)}", color_log="red")
-        finally:
-            self.start_button.configure(state="normal")
-            self.progress_bar.stop()
-            self.progress_bar.place_forget()
-            self.button_stop_program.configure(state="normal", text='Прекратить, сохранить результат')
+        # except Exception as e:
+        #     self.log(f"\nERROR GUI:", color_log="red")
+        #     self.log(f" {str(e)}", color_log="red")
+        # finally:
+        self.start_button.configure(state="normal")
+        self.progress_bar.stop()
+        self.progress_bar.place_forget()
 
 
 class TableWindow(ctk.CTkToplevel):
@@ -678,18 +685,21 @@ class TableWindow(ctk.CTkToplevel):
 
     def _rebuild_table(self):
         """Пересоздание таблицы (только при необходимости)"""
-        self.table.destroy()
-        self.table = CTkTable(
-            master=self.scroll_frame,
-            row=len(self.tabel_data),
-            column=len(self.headers),
-            values=self.tabel_data,
-            hover_color="#2A2A2A",
-            header_color="#1f538d",
-            wraplength=200
-        )
-        self.table.pack(expand=True, fill='both')
-        self._row_count = len(self.tabel_data)
+        try:
+            self.table.destroy()
+            self.table = CTkTable(
+                master=self.scroll_frame,
+                row=len(self.tabel_data),
+                column=len(self.headers),
+                values=self.tabel_data,
+                hover_color="#2A2A2A",
+                header_color="#1f538d",
+                wraplength=200
+            )
+            self.table.pack(expand=True, fill='both')
+            self._row_count = len(self.tabel_data)
+        except:
+            pass
 
     def clear(self):
         """Очищает таблицу, оставляя только заголовки"""

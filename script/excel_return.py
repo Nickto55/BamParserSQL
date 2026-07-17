@@ -1,3 +1,5 @@
+import datetime
+
 import pandas as pd
 
 from script.excel_reader import ExcelReader
@@ -32,7 +34,7 @@ class TableTransformation:
             )
 
         writer_excel = ExcelDataInserter(self.file_path)
-        writer_excel.insert_data(data={'':self.data_return}, sheet_name='Итог')
+        writer_excel.insert_data(data={'':self.data_return}, sheet_name=f'Итог {str(datetime.date.today()).replace('-','.')}')
 
 
 

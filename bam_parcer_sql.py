@@ -26,6 +26,8 @@ class SqlParserLogic:
     def log_program(self, message, color_log=None, line_target=None, mode=None):
         if self.bool_log:
             self.callback_gui_log(message, color_log=color_log, line_target=line_target, mode=mode)
+            # self.callback_gui_log(message, color_log=color_log)
+            print(message, line_target)
         else:
             print(message)
 
@@ -45,7 +47,7 @@ class SqlParserLogic:
         self.filter_data()
 
         data_result[""] = self.data.copy()
-        inserter = ExcelDataInserter(file_path, self.callback_gui_log)
+        inserter = ExcelDataInserter(file_path)
         inserter.insert_data(data_result, sheet_name="Изделия")
 
     def filter_data(self):
@@ -54,11 +56,15 @@ class SqlParserLogic:
 
         estimated_processing_time_for_one_request = 385
         estimated_running_program = (len(self.data_input_file) * estimated_processing_time_for_one_request) / 10
+        self.log_program('')
+        self.log_program('')
+        self.log_program('')
 
         self.time_transformations(
             estimated_running_program
             , 'Расчетное время работы программы'
             , '#F39741'
+            , line_target=5
         )
 
         if estimated_running_program / 60 >= 30:
@@ -73,12 +79,11 @@ class SqlParserLogic:
 
         if not self.no_repeat:
             self.log_program(
-                f'\n < |{str(count_dse):<{len(str(len(self.data_input_file)))}}/{len(self.data_input_file)}| >\n'
+                f'< |{str(count_dse):<{len(str(len(self.data_input_file)))}}/{len(self.data_input_file)}| >'
                 , color_log="#847E78"
-                , line_target=10
+                , line_target=6
                 , mode='replace'
             )
-            self.log_program('')
 
             start_time = time.perf_counter()
             count_time_to_dse = 0.0
@@ -91,7 +96,7 @@ class SqlParserLogic:
                 stat_time_to_one_request = time.perf_counter()
                 self.log_program(
                     f'Обработка дсе: {row_reply.get('Дсе', ''):<20} '
-                    , line_target=11
+                    , line_target=7
                     , mode='replace'
                 )
 
@@ -135,7 +140,7 @@ class SqlParserLogic:
                 self.log_program(
                     f'< |{str(count_dse):<{len(str(len(self.data_input_file)))}}/{len(self.data_input_file)}| >'
                     , color_log="#788084"
-                    , line_target=10
+                    , line_target=6
                     , mode='replace'
                 )
 
@@ -150,7 +155,6 @@ class SqlParserLogic:
             self.data = {}
 
             self.time_transformations(execution_time, 'Время обращения к базе данных', '#6e9d3c')
-            self.log_program('')
 
             for num_row, row_reply in self.data_input_file.items():
                 for row_cmd in cmd_data:
@@ -167,7 +171,7 @@ class SqlParserLogic:
                         )
                     self.data[row_reply.get('Дсе', '')] = row_reply
 
-    def time_transformations(self, sekunds_inp, text_log, color_text, line_target=12):
+    def time_transformations(self, sekunds_inp, text_log, color_text, line_target=8):
         minutes, sec = divmod(sekunds_inp, 60)
         hours, minutes = divmod(minutes, 60)
         if sekunds_inp / 60 > 1:
