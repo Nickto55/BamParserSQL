@@ -70,8 +70,8 @@ class SqlParserLogic:
         count_dse = 0
 
         estimated_processing_time_for_one_request = 385  # среднее время на обработку одного запроса, в мсек
-        estimated_running_program = (
-                                            len(self.data_input_file) * estimated_processing_time_for_one_request) / 10  # предполагаемое время работы программы
+        # предполагаемое время работы программы
+        estimated_running_program = (len(self.data_input_file) * estimated_processing_time_for_one_request) / 10
 
         self.time_transformations(
             estimated_running_program
@@ -107,11 +107,15 @@ class SqlParserLogic:
                     , line_target=11
                     , mode='replace'
                 )
+                ##------------------------
                 # time.sleep(random.randint(0, 1))
+                # cmd_data.append(i for i in range(12))
+                # dse_ctr = [{}]
+                ##------------------------
                 cmd_app = ScriptCmd()
                 dse_ctr = cmd_app.main(row_reply.get('Дсе', ''))
-                cmd_data.append(dse_ctr[0])
-                if not self.no_repeat:
+                try:
+                    cmd_data.append(dse_ctr[0])
                     row_reply.update(
                         {
                             "ТП не в архиве": dse_ctr[0].get('TPNoArch', '')
@@ -121,6 +125,23 @@ class SqlParserLogic:
                             , "Всего нет УП": dse_ctr[0].get('TPNoYP', '')
                             , "Наименование изделия (ИС)": dse_ctr[0].get('ShortName', '')
                         }
+                    )
+                except Exception as error_server_read:
+                    messege_excel = 'Ошибка сервера, нет данных'
+                    row_reply.update(
+                        {
+                            "ТП не в архиве": messege_excel
+                            , "ДСЕ без маршрутов": messege_excel
+                            , "ДСЕ без основного материала": messege_excel
+                            , "Дсе без трудоемкости": messege_excel
+                            , "Всего нет УП": messege_excel
+                            , "Наименование изделия (ИС)": messege_excel
+                        }
+                    )
+                    self.log_program(
+                        f"{messege_excel}: {row_reply.get('Дсе', '')}",
+                        color_log='#8d0914'
+                        , line_target=15
                     )
                 if self.table_callback:
                     self.table_callback(row_reply)

@@ -7,19 +7,17 @@ import threading
 import pandas as pd
 import customtkinter as ctk
 
+from PIL import Image
 from CTkTable import CTkTable
-from PIL import Image, ImageTk
-from PIL._tkinter_finder import tk
-from tkinter import filedialog, END, StringVar, BooleanVar
-
 from dataclasses import fields
+from PIL._tkinter_finder import tk
+from tkinter import filedialog, END
 
-from pandas.io.sas.sas_constants import sas_server_type_length
-
-from script.env_assets import HandlerEnv
 from sql_order_engine import EngineLogic
-from dse_order_manager import DseOrderLogic
+from script.env_assets import HandlerEnv
 from bam_parcer_sql import SqlParserLogic
+from dse_order_manager import DseOrderLogic
+from script.excel_return import TableTransformation
 from handlings.handling_config import ConfigMainProgram
 
 
@@ -41,6 +39,13 @@ def checking_dependencies(log_callback=None):
         log_callback(f'Путь к файлу: {file_path}', color_log='#ff8d52')
         return True
     return False
+
+
+def get_resource_path(relative_path):
+    """ Возвращает абсолютный путь к ресурсу, учитывая сборку PyInstaller """
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, relative_path)
+    return os.path.join(os.path.abspath("."), relative_path)
 
 
 def resource_path(relative_path):
@@ -83,6 +88,7 @@ def send_notification(title, message, name_program, settime=15):
 class AppGui(ctk.CTk):
 
     def __init__(self):
+        self.bool_stop = False
         self.config_program = ConfigMainProgram()
         self.geomitri_constants()
         super().__init__()
@@ -96,6 +102,7 @@ class AppGui(ctk.CTk):
 
         self.log_queue = queue.Queue()
         self.table_queue = queue.Queue()
+        self.check_stop_var = queue.Queue()
 
         self.check_log_queue()
         self.check_table_queue()
@@ -105,9 +112,9 @@ class AppGui(ctk.CTk):
         self.init_program()
 
         self.bool_button_tabel_window = False
-        self.table_window = None
 
     def init_program(self):
+        self.table_window = TableWindow(self)
         from script.scr_cmd_run import ScriptCmd
 
         test_bd_connect = ScriptCmd(log_callback=self.log)
@@ -172,8 +179,8 @@ class AppGui(ctk.CTk):
         side_bar_frame.place(x=self.pos_sidebar_frame_x, y=self.pos_sidebar_frame_y)
 
         icon_englie = ctk.CTkImage(
-            light_image=Image.open("static/png/bam-parcer-sql.png")
-            , dark_image=Image.open("static/png/bam-parcer-sql.png")
+            light_image=Image.open(get_resource_path("static/png/bam-parcer-sql.png"))
+            , dark_image=Image.open(get_resource_path("static/png/bam-parcer-sql.png"))
             , size=(self.height_logo_sidebar_frame, self.width_logo_sidebar_frame)
         )
         ctk.CTkButton(
@@ -216,6 +223,28 @@ class AppGui(ctk.CTk):
         )
         self.checkbox_bam_parser.select(1)
         self.checkbox_bam_parser.place(x=self.indent_frame, y=self.height_row_in_frame + 2 * self.indent_frame)
+
+        checkbox_frame_2 = ctk.CTkFrame(
+            side_bar_frame
+            , width=self.width_sidebar_frame - 2 * self.indent_frame
+            , height=1 * self.height_row_in_frame + 2 * self.indent_frame
+            , fg_color='#1d1e1e'
+        )
+        checkbox_frame_2.place(
+            x=self.indent_frame
+            ,
+            y=self.width_logo_sidebar_frame + 2 * self.height_row_in_frame + 3 * self.indent_frame + 4 * self.indent_frame
+        )
+
+        self.checkbox_result = ctk.CTkCheckBox(
+            checkbox_frame_2
+            , text='Generate table summary'
+            , hover=True
+            , checkbox_width=12
+            , checkbox_height=12
+        )
+        self.checkbox_result.select(1)
+        self.checkbox_result.place(x=self.indent_frame, y=self.indent_frame)
 
     def _main_frame(self):
         main_frame = ctk.CTkFrame(
@@ -299,6 +328,21 @@ class AppGui(ctk.CTk):
             x=self.indent_frame
             , y=self.height_row_in_frame + 2 * self.indent_frame + 1
         )
+        def fdf():
+            self.bool_stop = False
+        self.button_stop_program = ctk.CTkButton(
+            main_frame
+            , height=self.height_row_in_frame
+            , width=40
+            , text='Прекратить, сохранить результат'
+            , fg_color='#a93c22'
+            , hover_color='#752917'
+            , command=fdf()
+        )
+        self.button_stop_program.place(
+            x=415
+            , y=self.height_row_in_frame + 2 * self.indent_frame + 1
+        )
 
         self.progress_bar = ctk.CTkProgressBar(
             main_frame
@@ -335,9 +379,22 @@ class AppGui(ctk.CTk):
         if self.bool_button_tabel_window:
             self.table_window.destroy()
         else:
-            self.table_window = TabelWindow(self)
+            self.table_window = TableWindow(self)
+            # self.table_window.open_window()
 
         self.bool_button_tabel_window = not self.bool_button_tabel_window
+
+    def command_button_stop(self):
+        """Проверяет очередь таблицы и обновляет GUI в главном потоке"""
+        try:
+            while True:
+                row_data = self.check_stop_var.get_nowait()
+                self.table_window.add_row(row_data)
+        except queue.Empty:
+            pass
+        finally:
+            # Проверяем очередь каждые 50-100 мс
+            self.after(50, self.command_button_stop)
 
     def command_button_open_result(self):
         if not self.path_outfile is None:
@@ -397,6 +454,7 @@ class AppGui(ctk.CTk):
             self.start_button.configure(state="normal")
             self.log(f"<Установлен путь для файла отчетов>", color_log='#9aa5aa')
             self.reply_path_entry.configure(border_color='#788084')
+            self.reply_name_entry.configure(border_color='#788084')
 
     def check_table_queue(self):
         """Проверяет очередь таблицы и обновляет GUI в главном потоке"""
@@ -522,6 +580,7 @@ class AppGui(ctk.CTk):
         if pd.isna(self.reply_path_entry.get()) or self.reply_path_entry.get() == "":
             self.log("Введите путь к файлу", color_log='red')
             self.reply_path_entry.configure(border_color="red")
+            self.reply_name_entry.configure(border_color="red")
             self.start_button.configure(state="normal")
 
             self.progress_bar.stop()
@@ -530,48 +589,52 @@ class AppGui(ctk.CTk):
             return
         else:
             self.reply_path_entry.configure(border_color='#788084')
+            self.reply_name_entry.configure(border_color='#788084')
 
         self.log("Начало работы...")
 
-        # try:
-        self.path_outfile = None
-        if self.checkbox_dse_order.get() and self.checkbox_bam_parser.get():
-            manager = EngineLogic(log_callback=self.log, table_callback=self.table_callback)
-            manager.main(self.reply_path_entry.get())
-        elif self.checkbox_dse_order.get() and not self.checkbox_bam_parser.get():
-            manager = DseOrderLogic()
-            manager.main(self.reply_path_entry.get())
-        elif not self.checkbox_dse_order.get() and self.checkbox_bam_parser.get():
-            manager = SqlParserLogic()
-            manager.main(self.reply_path_entry.get())
-        else:
-            self.log(f'Произошла ошибка: {self.checkbox_dse_order.get()} {self.checkbox_bam_parser.get()}')
+        try:
+            self.path_outfile = None
+            if self.checkbox_dse_order.get() and self.checkbox_bam_parser.get():
+                manager = EngineLogic(log_callback=self.log, table_callback=self.table_callback, bool_stop=self.bool_stop)
+                manager.main(self.reply_path_entry.get())
+            elif self.checkbox_dse_order.get() and not self.checkbox_bam_parser.get():
+                manager = DseOrderLogic()
+                manager.main(self.reply_path_entry.get())
+            elif not self.checkbox_dse_order.get() and self.checkbox_bam_parser.get():
+                manager = SqlParserLogic(log_callback=self.log, table_callback=self.table_callback,bool_stop=self.bool_stop)
+                manager.main(self.reply_path_entry.get())
+            else:
+                self.log(f'Произошла ошибка: {self.checkbox_dse_order.get()} {self.checkbox_bam_parser.get()}')
 
-        self.path_outfile = self.reply_path_entry.get()
-        self.button_open_result_tabel.place(
-            x=self.width_path_entry + 22
-            , y=self.height_row_in_frame + 2 * self.indent_frame + 1
-        )
-        self.log("Процесс успешно завершен.", color_log="green")
-        send_notification(
-            "Программа завершена"
-            , "Программа завершена , проверте файл"
-            , self.name_program
-            , 16
-        )
-        self.start_button.configure(state="normal")
-        self.progress_bar.stop()
-        self.progress_bar.place_forget()
-        # except Exception as e:
-        #     self.log(f"ERROR:", color_log="red")
-        #     self.log(f" {str(e)}", color_log="red")
-        # finally:
-        self.start_button.configure(state="normal")
-        self.progress_bar.stop()
-        self.progress_bar.place_forget()
+            if self.checkbox_result.get():
+                result = TableTransformation(self.reply_path_entry.get())
+                result.main()
+            self.path_outfile = self.reply_path_entry.get()
+            self.button_open_result_tabel.place(
+                x=self.width_path_entry + 22
+                , y=self.height_row_in_frame + 2 * self.indent_frame + 1
+            )
+            self.log("Процесс успешно завершен.", color_log="green")
+            send_notification(
+                "Программа завершена"
+                , "Программа завершена , проверте файл"
+                , self.name_program
+                , 16
+            )
+            self.start_button.configure(state="normal")
+            self.progress_bar.stop()
+            self.progress_bar.place_forget()
+        except Exception as e:
+            self.log(f"\nERROR GUI:", color_log="red")
+            self.log(f" {str(e)}", color_log="red")
+        finally:
+            self.start_button.configure(state="normal")
+            self.progress_bar.stop()
+            self.progress_bar.place_forget()
 
 
-class TabelWindow(ctk.CTkToplevel):
+class TableWindow(ctk.CTkToplevel):
     def __init__(self, param):
         super().__init__(param)
         self.title('Полученные данные')

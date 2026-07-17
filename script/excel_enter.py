@@ -9,7 +9,7 @@ class ExcelDataInserter:
     Создаёт новый лист с заданным названием и записывает данные в табличном виде.
     """
 
-    def __init__(self, file_path, log_callback):
+    def __init__(self, file_path):
         """
         :param file_path: Путь к существующему Excel-файлу
         """
@@ -17,7 +17,6 @@ class ExcelDataInserter:
         self.wb = load_workbook(file_path)
 
         self.fill_color1 = PatternFill(start_color="6f747c", fill_type="solid")
-        self.log_program = log_callback or print
 
     def insert_data(self, data, sheet_name, headers=None):
         """
