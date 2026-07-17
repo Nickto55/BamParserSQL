@@ -88,7 +88,7 @@ def send_notification(title, message, name_program, settime=15):
 class AppGui(ctk.CTk):
 
     def __init__(self):
-        self.bool_stop = False
+        self.stop_event = threading.Event()  # Флаг остановки для рабочего потока
         self.config_program = ConfigMainProgram()
         self.geomitri_constants()
         super().__init__()
@@ -328,8 +328,7 @@ class AppGui(ctk.CTk):
             x=self.indent_frame
             , y=self.height_row_in_frame + 2 * self.indent_frame + 1
         )
-        def fdf():
-            self.bool_stop = False
+
         self.button_stop_program = ctk.CTkButton(
             main_frame
             , height=self.height_row_in_frame
@@ -337,7 +336,7 @@ class AppGui(ctk.CTk):
             , text='Прекратить, сохранить результат'
             , fg_color='#a93c22'
             , hover_color='#752917'
-            , command=fdf()
+            , command=self.stop_execution  # БЕЗ скобок!
         )
         self.button_stop_program.place(
             x=415
@@ -375,12 +374,17 @@ class AppGui(ctk.CTk):
         )
         self.status_text.place(x=self.indent_frame, y=self.indent_frame)
 
+    def stop_execution(self):
+        """Отправляет сигнал остановки в рабочий поток"""
+        self.stop_event.set()
+        self.log("Отправлен сигнал остановки...", color_log="orange")
+        self.button_stop_program.configure(state="disabled", text="Остановка...")
+
     def command_button_open_work(self):
         if self.bool_button_tabel_window:
             self.table_window.destroy()
         else:
             self.table_window = TableWindow(self)
-            # self.table_window.open_window()
 
         self.bool_button_tabel_window = not self.bool_button_tabel_window
 
@@ -393,7 +397,6 @@ class AppGui(ctk.CTk):
         except queue.Empty:
             pass
         finally:
-            # Проверяем очередь каждые 50-100 мс
             self.after(50, self.command_button_stop)
 
     def command_button_open_result(self):
@@ -407,7 +410,6 @@ class AppGui(ctk.CTk):
             self.button_open_result_tabel.after(1000, merge_color)
 
             try:
-
                 os.startfile(self.path_outfile)
                 self.log("-Файл открыт", color_log="#788084")
             except Exception as e:
@@ -465,7 +467,6 @@ class AppGui(ctk.CTk):
         except queue.Empty:
             pass
         finally:
-            # Проверяем очередь каждые 50-100 мс
             self.after(50, self.check_table_queue)
 
     def table_callback(self, row_data):
@@ -484,37 +485,22 @@ class AppGui(ctk.CTk):
             self.after(50, self.check_log_queue)
 
     def _log_to_gui(self, message, color_log=None, line_target=None, mode='append'):
-        """
-        Внутренний метод — вывод в текстовое поле (только из главного потока)
-
-        Args:
-            message: текст сообщения
-            color_log: цвет текста (hex или tkinter-имя)
-            line_target: номер строки для записи (None = в конец)
-            mode: 'append' — дописать к строке, 'replace' — заменить строку
-        """
         if line_target is not None:
-            # Работаем с конкретной строкой
             line_pos = f"{line_target}.0"
             line_end = f"{line_target}.end"
 
-            # Проверяем существование строки
             try:
                 self.status_text.index(line_end)
             except tk.TclError:
-                # Строки нет — вставляем пустые строки до нужной
                 current_lines = int(self.status_text.index('end-1c').split('.')[0])
                 for _ in range(line_target - current_lines + 1):
                     self.status_text.insert("end", "\n")
 
             if mode == 'replace':
-                # Удаляем содержимое строки
                 self.status_text.delete(line_pos, line_end)
                 self.status_text.insert(line_pos, message)
-            else:  # append
-                # Дописываем в конец строки
+            else:
                 current_end = self.status_text.index(line_end)
-                # Убираем \n в конце строки если есть
                 line_content = self.status_text.get(line_pos, line_end)
                 if line_content.endswith('\n'):
                     insert_pos = f"{line_target}.{len(line_content) - 1}"
@@ -522,13 +508,11 @@ class AppGui(ctk.CTk):
                     insert_pos = line_end
                 self.status_text.insert(insert_pos, message)
 
-            # Применяем цвет
             if color_log:
                 tag_name = f"color_{color_log}_{line_target}"
                 self.status_text.tag_config(tag_name, foreground=color_log)
                 self.status_text.tag_add(tag_name, line_pos, line_end)
         else:
-            # Обычная вставка в конец
             self.status_text.insert("end", f"{message}\n")
 
             if color_log:
@@ -543,21 +527,14 @@ class AppGui(ctk.CTk):
         self.status_text.see("end")
 
     def log(self, message, color_log=None, line_target=None, mode='append'):
-        """
-        Публичный метод логирования — можно вызывать из любого потока
-
-        Args:
-            message: текст сообщения
-            color_log: цвет текста
-            line_target: номер строки (1-based), None = в конец
-            mode: 'append' или 'replace'
-        """
         self.log_queue.put((message, color_log, line_target, mode))
 
     def run_manager_thread(self):
         """Запуск в отдельном потоке, чтобы GUI не зависал"""
         self.button_open_result_tabel.place_forget()
         self.start_button.configure(state="disabled")
+        self.button_stop_program.configure(state="normal", text='Прекратить, сохранить результат')
+        self.stop_event.clear()
 
         if pd.isna(self.reply_path_entry.get()):
             self.log("Ошибка, укажите путь к файлу", color_log="red")
@@ -582,10 +559,8 @@ class AppGui(ctk.CTk):
             self.reply_path_entry.configure(border_color="red")
             self.reply_name_entry.configure(border_color="red")
             self.start_button.configure(state="normal")
-
             self.progress_bar.stop()
             self.progress_bar.place_forget()
-
             return
         else:
             self.reply_path_entry.configure(border_color='#788084')
@@ -596,13 +571,21 @@ class AppGui(ctk.CTk):
         try:
             self.path_outfile = None
             if self.checkbox_dse_order.get() and self.checkbox_bam_parser.get():
-                manager = EngineLogic(log_callback=self.log, table_callback=self.table_callback, bool_stop=self.bool_stop)
+                manager = EngineLogic(
+                    log_callback=self.log,
+                    table_callback=self.table_callback,
+                    stop_event=self.stop_event
+                )
                 manager.main(self.reply_path_entry.get())
             elif self.checkbox_dse_order.get() and not self.checkbox_bam_parser.get():
                 manager = DseOrderLogic()
                 manager.main(self.reply_path_entry.get())
             elif not self.checkbox_dse_order.get() and self.checkbox_bam_parser.get():
-                manager = SqlParserLogic(log_callback=self.log, table_callback=self.table_callback,bool_stop=self.bool_stop)
+                manager = SqlParserLogic(
+                    log_callback=self.log,
+                    table_callback=self.table_callback,
+                    stop_event=self.stop_event
+                )
                 manager.main(self.reply_path_entry.get())
             else:
                 self.log(f'Произошла ошибка: {self.checkbox_dse_order.get()} {self.checkbox_bam_parser.get()}')
@@ -615,16 +598,23 @@ class AppGui(ctk.CTk):
                 x=self.width_path_entry + 22
                 , y=self.height_row_in_frame + 2 * self.indent_frame + 1
             )
-            self.log("Процесс успешно завершен.", color_log="green")
-            send_notification(
-                "Программа завершена"
-                , "Программа завершена , проверте файл"
-                , self.name_program
-                , 16
-            )
+
+            if self.stop_event.is_set():
+                self.log("Процесс остановлен пользователем. Результат сохранён.", color_log="orange")
+            else:
+                self.log("Процесс успешно завершен.", color_log="green")
+                send_notification(
+                    "Программа завершена"
+                    , "Программа завершена , проверте файл"
+                    , self.name_program
+                    , 16
+                )
+
             self.start_button.configure(state="normal")
             self.progress_bar.stop()
             self.progress_bar.place_forget()
+            self.button_stop_program.configure(state="normal", text='Прекратить, сохранить результат')
+
         except Exception as e:
             self.log(f"\nERROR GUI:", color_log="red")
             self.log(f" {str(e)}", color_log="red")
@@ -632,6 +622,7 @@ class AppGui(ctk.CTk):
             self.start_button.configure(state="normal")
             self.progress_bar.stop()
             self.progress_bar.place_forget()
+            self.button_stop_program.configure(state="normal", text='Прекратить, сохранить результат')
 
 
 class TableWindow(ctk.CTkToplevel):
@@ -640,45 +631,85 @@ class TableWindow(ctk.CTkToplevel):
         self.title('Полученные данные')
         self.geometry('1565x600')
 
-        # Заголовки таблицы (должны совпадать с ключами в словаре row_reply)
         self.headers = [
             "Дсе", "ТП не в архиве", "ДСЕ без маршрутов",
             "ДСЕ без основного материала", "Дсе без трудоемкости",
             "Всего нет УП", "Наименование изделия (ИС)"
         ]
 
-        # Инициализируем таблицу только заголовками
+        self.scroll_frame = ctk.CTkScrollableFrame(
+            self,
+            width=1525,
+            height=560
+        )
+        self.scroll_frame.pack(expand=True, fill='both', padx=20, pady=20)
+
         self.tabel_data = [self.headers]
 
         self.table = CTkTable(
-            master=self,
+            master=self.scroll_frame,
             row=1,
             column=len(self.headers),
             values=self.tabel_data,
-            hover_color="#2A2A2A"
+            hover_color="#2A2A2A",
+            header_color="#1f538d",
+            wraplength=200
         )
-        self.table.pack(expand=True, fill='x', side='top', padx=20, pady=20, anchor='n')
+        self.table.pack(expand=True, fill='both')
+
+        self._row_count = 1
 
     def add_row(self, row_data):
-        """Добавляет новую строку в таблицу"""
-        # Формируем список значений в порядке заголовков
+        """Добавляет новую строку в таблицу без полного пересоздания"""
         row_list = [str(row_data.get(col, "")) for col in self.headers]
         self.tabel_data.append(row_list)
 
-        # Пересоздаем виджет таблицы для обновления UI
+        try:
+            if hasattr(self.table, 'add_row'):
+                self.table.add_row(values=row_list)
+                self._row_count += 1
+            elif hasattr(self.table, 'insert_row'):
+                self.table.insert_row(self._row_count, values=row_list)
+                self._row_count += 1
+            else:
+                self._rebuild_table()
+        except Exception:
+            self._rebuild_table()
+
+    def _rebuild_table(self):
+        """Пересоздание таблицы (только при необходимости)"""
         self.table.destroy()
         self.table = CTkTable(
-            master=self
-            , row=len(self.tabel_data)
-            , column=len(self.headers)
-            , values=self.tabel_data
-            , hover_color="#2A2A2A"
-            , width=30
+            master=self.scroll_frame,
+            row=len(self.tabel_data),
+            column=len(self.headers),
+            values=self.tabel_data,
+            hover_color="#2A2A2A",
+            header_color="#1f538d",
+            wraplength=200
         )
-        self.table.pack(expand=True, fill='x', side='top', padx=20, pady=20, anchor='n')
+        self.table.pack(expand=True, fill='both')
+        self._row_count = len(self.tabel_data)
+
+    def clear(self):
+        """Очищает таблицу, оставляя только заголовки"""
+        self.tabel_data = [self.headers]
+        self._rebuild_table()
+
+    def refresh_last_row(self, row_data):
+        """Обновляет последнюю добавленную строку"""
+        if len(self.tabel_data) > 1:
+            row_list = [str(row_data.get(col, "")) for col in self.headers]
+            self.tabel_data[-1] = row_list
+            try:
+                if hasattr(self.table, 'edit_row'):
+                    self.table.edit_row(self._row_count - 1, values=row_list)
+                else:
+                    self._rebuild_table()
+            except Exception:
+                self._rebuild_table()
 
 
 if __name__ == "__main__":
     app = AppGui()
     app.mainloop()
-    # checking_dependencies()

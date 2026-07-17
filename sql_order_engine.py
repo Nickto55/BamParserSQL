@@ -7,10 +7,10 @@ from script.excel_reader import ExcelReader
 
 
 class EngineLogic:
-    def __init__(self, log_callback=None, table_callback = None):
+    def __init__(self, log_callback=None, table_callback=None, stop_event=None):
         self.path_to_file = None
-
         self.sheet_names = None
+        self.stop_event = stop_event
 
         self.callback_gui_log = log_callback
         if log_callback:
@@ -18,7 +18,7 @@ class EngineLogic:
         else:
             self.bool_log = False
 
-        self.bam_parser_sql = SqlParserLogic(log_callback, table_callback)
+        self.bam_parser_sql = SqlParserLogic(log_callback, table_callback, stop_event)
         self.dse_order_manager = DseOrderLogic(log_callback)
 
     def log_program(self, message, color_log=None):
@@ -55,11 +55,8 @@ class EngineLogic:
                     self.log_program(f'Error EngineLogic main: {e}', color_log='red')
 
 
-
-
 if __name__ == '__main__':
     app = EngineLogic()
     data = app.main(r"C:\Users\yakovlev_nd\Desktop\Tests\gfgdgssd\Новая папка\26,06,01-08,31eeej — копия — копия.xlsx")
-
     for i, k in data.items():
         print(i, k)
