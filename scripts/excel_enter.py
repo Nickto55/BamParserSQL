@@ -46,14 +46,17 @@ class ExcelDataInserter:
                     break
             headers = list(first_item.keys()) if first_item else []
 
-
+        header_filter = None
         for col_idx, header in enumerate(headers, 1):
+            header_filter = header
             cell = ws.cell(row=1, column=col_idx, value=header)
             cell.fill = self.fill_color1
             cell.font = Font(color="f2ecde")
 
-        ws.auto_filter.ref = f"A1:{get_column_letter(len(header))}1"
-
+        try:
+            ws.auto_filter.ref = f"A1:{get_column_letter(len(header_filter))}1"
+        except:
+            ws.auto_filter.ref = f"A1:Z1"
 
         row_idx = 2
         for product_key, product_value in data.items():

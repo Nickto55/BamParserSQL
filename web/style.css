@@ -254,16 +254,15 @@ button {
 .btn-help {
     margin-top: auto;
     padding: 11px;
-    background: linear-gradient(135deg, #2bd4da 0%, #1a9aa5 100%);
-    color: #02101f;
-    border: none;
+    background: #02192a;
+    color: rgba(53, 224, 230, 0.6);
+    border-color: rgba(53, 224, 230, 0.6);
     border-radius: 9px;
     cursor: pointer;
     font-size: 13px;
     font-weight: 800;
     letter-spacing: 2px;
     transition: all 0.2s;
-    box-shadow: 0 0 14px rgba(53, 224, 230, 0.35);
 }
 
 .btn-help:hover {
@@ -356,10 +355,11 @@ button {
 
 .btn-work {
     padding: 9px 16px;
-    background: linear-gradient(135deg, var(--accent-orange) 0%, var(--accent-orange-dark) 100%);
-    color: #1d0d02;
+    background: #ffffff00;
+    color: var(--accent-orange);
+    
     font-weight: 600;
-    border: none;
+    border-color: var(--accent-orange);
     border-radius: 8px;
     cursor: pointer;
     font-size: 13px;

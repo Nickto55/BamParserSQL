@@ -90,15 +90,15 @@ class SqlParserLogic:
             , line_target=5
         )
 
-        if estimated_running_program / 60 >= 30:
-            if CTkMessagebox(
-                    title="Продолжить?"
-                    ,
-                    message="Предполагаемое время работы программы, превышает 30 мин.\nЖелаете ли вы продолжить запуск"
-                    , option_2='Да'
-                    , option_1='Нет'
-            ).get() == 'Нет':
-                self.no_repeat = True
+        # if estimated_running_program / 60 >= 30:
+        #     if CTkMessagebox(
+        #             title="Продолжить?"
+        #             ,
+        #             message="Предполагаемое время работы программы, превышает 30 мин.\nЖелаете ли вы продолжить запуск"
+        #             , option_2='Да'
+        #             , option_1='Нет'
+        #     ).get() == 'Нет':
+        #         self.no_repeat = True
 
         if not self.no_repeat:
             len_data_dse = len(self.data_input_file)

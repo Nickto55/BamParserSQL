@@ -19,9 +19,7 @@ from dse_order_manager import DseOrderLogic
 from script.excel_return import TableTransformation
 from handlings.handling_config import ConfigMainProgram
 
-# ==============================================================================
-# ГЛОБАЛЬНАЯ НАСТРОЙКА TKINTER ДЛЯ РАБОТЫ С FASTAPI
-# ==============================================================================
+
 _tk_request_queue = queue.Queue()
 _tk_response_dict = {}
 
@@ -167,63 +165,64 @@ class Backend:
         self.table_data = []
         self.path_outfile = None
 
-        paths = self._normalize_paths(file_paths)
+        paths = self._normalize_paths(file_paths)[0]
+
         if not paths:
             self._log_callback("Ошибка: не указаны файлы для обработки", "red")
             return {'success': False, 'error': 'Пустой список файлов'}
 
         def run_logic():
-            try:
-                self._log_callback("Начало работы...")
+            # try:
+            self._log_callback("Начало работы...")
 
-                var_split = options.get('query_split', 1)
-                var_error_handler = options.get('error_handler', True)
+            var_split = options.get('query_split', 1)
+            var_error_handler = options.get('error_handler', True)
 
-                checkbox_dse = options.get('dse_order', True)
-                checkbox_bam = options.get('bam_parser', True)
-                checkbox_result = options.get('generate_table', True)
+            checkbox_dse = options.get('dse_order', True)
+            checkbox_bam = options.get('bam_parser', True)
+            checkbox_result = options.get('generate_table', True)
 
-                if checkbox_dse and checkbox_bam:
-                    manager = EngineLogic(
-                        log_callback=self._log_callback,
-                        table_callback=self._table_callback,
-                        stop_event=self.stop_event,
-                        var_radiobutton_value_query_split=var_split,
-                        var_bool_error_handler_inside_request_for_swith=var_error_handler
-                    )
-                    manager.main(paths)
-                elif checkbox_dse and not checkbox_bam:
-                    manager = DseOrderLogic()
-                    manager.main(paths)
-                elif not checkbox_dse and checkbox_bam:
-                    manager = SqlParserLogic(
-                        log_callback=self._log_callback,
-                        table_callback=self._table_callback,
-                        stop_event=self.stop_event,
-                    )
-                    manager.main(paths, var_split, var_error_handler)
-                else:
-                    self._log_callback('Ошибка: не выбран ни один модуль обработки', 'red')
-                    return
+            if checkbox_dse and checkbox_bam:
+                manager = EngineLogic(
+                    log_callback=self._log_callback,
+                    table_callback=self._table_callback,
+                    stop_event=self.stop_event,
+                    var_radiobutton_value_query_split=var_split,
+                    var_bool_error_handler_inside_request_for_swith=var_error_handler
+                )
+                manager.main(paths)
+            elif checkbox_dse and not checkbox_bam:
+                manager = DseOrderLogic()
+                manager.main(paths)
+            elif not checkbox_dse and checkbox_bam:
+                manager = SqlParserLogic(
+                    log_callback=self._log_callback,
+                    table_callback=self._table_callback,
+                    stop_event=self.stop_event,
+                )
+                manager.main(paths, var_split, var_error_handler)
+            else:
+                self._log_callback('Ошибка: не выбран ни один модуль обработки', 'red')
+                return
 
-                if checkbox_result:
-                    result = TableTransformation(paths)
-                    result.main()
+            if checkbox_result:
+                result = TableTransformation(paths)
+                result.main()
 
-                self.path_outfile = paths
+            self.path_outfile = paths
 
-                if self.stop_event.is_set():
-                    self._log_callback("Процесс остановлен пользователем. Результат сохранён.", "orange")
-                else:
-                    self._log_callback("Процесс успешно завершен.", "green")
-                    self._send_notification(
-                        "Программа завершена",
-                        "Программа завершена, проверьте файл",
-                        16
-                    )
+            if self.stop_event.is_set():
+                self._log_callback("Процесс остановлен пользователем. Результат сохранён.", "orange")
+            else:
+                self._log_callback("Процесс успешно завершен.", "green")
+                self._send_notification(
+                    "Программа завершена",
+                    "Программа завершена, проверьте файл",
+                    16
+                )
 
-            except Exception as e:
-                self._log_callback(f"\nERROR: {str(e)}", "red")
+            # except Exception as e:
+            #     self._log_callback(f"\nERROR: {str(e)}", "red")
 
         self.current_thread = threading.Thread(target=run_logic, daemon=True)
         self.current_thread.start()
@@ -245,16 +244,14 @@ class Backend:
             subprocess.Popen(['xdg-open', path])
 
     def open_result_file(self):
-        paths = self._normalize_paths(self.path_outfile)
-        if not paths:
+        path = self.path_outfile
+        if not path:
             return {'success': False, 'error': 'Путь к файлу не указан'}
         try:
-            target = paths[0]
-            # Если это файл — открываем содержащую папку, иначе саму папку
-            if os.path.isfile(target):
-                self._open_path(os.path.dirname(os.path.abspath(target)))
-            else:
-                self._open_path(target)
+            target = path
+
+            self._open_path(os.path.abspath(target))
+
             self._log_callback("-Файл открыт", "#788084")
             return {'success': True}
         except Exception as e:
