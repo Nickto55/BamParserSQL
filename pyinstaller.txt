@@ -1,0 +1,4 @@
+##Standart
+pyinstaller --clean -w --onefile --hidden-import=pystray._win32 --hidden-import=openpyxl --hidden-import=plyer.platforms.win.notification --add-data "static;static"--name="Bam Parser SQL" --icon=static/ico/app_icon.ico body.py
+##Console
+pyinstaller --clean  --onefile --hidden-import=pystray._win32 --hidden-import=openpyxl --hidden-import=plyer.platforms.win.notification --add-data "static;static"--name="Bam Parser SQL - Console" --icon=static/ico/app_icon.ico body.py
