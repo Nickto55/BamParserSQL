@@ -1,7 +1,9 @@
 import os
 import sys
+import base64
 import threading
 import time
+import subprocess
 import pandas as pd
 import plyer
 import tkinter as tk
@@ -61,7 +63,6 @@ _tk_thread = threading.Thread(target=_tkinter_worker, daemon=True)
 _tk_thread.start()
 
 
-
 class Backend:
     def __init__(self):
         self.stop_event = threading.Event()
@@ -76,12 +77,21 @@ class Backend:
         ]
         self.log_messages = []
         self._table_window_open = False
-        self._callbacks = []
 
     def get_resource_path(self, relative_path):
         if hasattr(sys, '_MEIPASS'):
             return os.path.join(sys._MEIPASS, relative_path)
         return os.path.join(os.path.abspath("."), relative_path)
+
+    def get_logo(self):
+        """Логотип в base64 data URI — надёжно грузится в webview из любого контекста"""
+        try:
+            logo_path = self.get_resource_path('static/png/bam-parcer-sql.png')
+            with open(logo_path, 'rb') as f:
+                encoded = base64.b64encode(f.read()).decode('ascii')
+            return {'success': True, 'data_uri': f'data:image/png;base64,{encoded}'}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
 
     def check_dependencies(self):
         env = HandlerEnv()
@@ -108,7 +118,7 @@ class Backend:
         """
         req_id = str(uuid.uuid4())
         _tk_request_queue.put({'id': req_id, 'action': 'select_files', 'name': name})
-        timeout = 60
+        timeout = 120
         start_time = time.time()
         while req_id not in _tk_response_dict:
             if time.time() - start_time > timeout:
@@ -142,64 +152,78 @@ class Backend:
     def _table_callback(self, row_data):
         self.table_data.append(row_data)
 
+    @staticmethod
+    def _normalize_paths(file_paths):
+        """Приводит вход к списку путей: принимает list, tuple или строку с разделителями"""
+        if isinstance(file_paths, (list, tuple)):
+            return [str(p).strip() for p in file_paths if str(p).strip()]
+        if isinstance(file_paths, str):
+            return [p.strip() for p in file_paths.replace(';', ',').split(',') if p.strip()]
+        return []
+
     def start_processing(self, file_paths, options):
         self.stop_event.clear()
         self.log_messages = []
         self.table_data = []
         self.path_outfile = None
 
+        paths = self._normalize_paths(file_paths)
+        if not paths:
+            self._log_callback("Ошибка: не указаны файлы для обработки", "red")
+            return {'success': False, 'error': 'Пустой список файлов'}
+
         def run_logic():
-            # try:
-            self._log_callback("Начало работы...")
+            try:
+                self._log_callback("Начало работы...")
 
-            var_split = options.get('query_split', 1)
-            var_error_handler = options.get('error_handler', True)
+                var_split = options.get('query_split', 1)
+                var_error_handler = options.get('error_handler', True)
 
-            checkbox_dse = options.get('dse_order', True)
-            checkbox_bam = options.get('bam_parser', True)
-            checkbox_result = options.get('generate_table', True)
+                checkbox_dse = options.get('dse_order', True)
+                checkbox_bam = options.get('bam_parser', True)
+                checkbox_result = options.get('generate_table', True)
 
-            if checkbox_dse and checkbox_bam:
-                manager = EngineLogic(
-                    log_callback=self._log_callback,
-                    table_callback=self._table_callback,
-                    stop_event=self.stop_event,
-                    var_radiobutton_value_query_split=var_split,
-                    var_bool_error_handler_inside_request_for_swith=var_error_handler
-                )
-                manager.main(file_paths)
-            elif checkbox_dse and not checkbox_bam:
-                manager = DseOrderLogic()
-                manager.main(file_paths)
-            elif not checkbox_dse and checkbox_bam:
-                manager = SqlParserLogic(
-                    log_callback=self._log_callback,
-                    table_callback=self._table_callback,
-                    stop_event=self.stop_event,
-                )
-                manager.main(file_paths, var_split, var_error_handler)
-            else:
-                self._log_callback(f'Произошла ошибка: {checkbox_dse} {checkbox_bam}', 'red')
-                return
+                if checkbox_dse and checkbox_bam:
+                    manager = EngineLogic(
+                        log_callback=self._log_callback,
+                        table_callback=self._table_callback,
+                        stop_event=self.stop_event,
+                        var_radiobutton_value_query_split=var_split,
+                        var_bool_error_handler_inside_request_for_swith=var_error_handler
+                    )
+                    manager.main(paths)
+                elif checkbox_dse and not checkbox_bam:
+                    manager = DseOrderLogic()
+                    manager.main(paths)
+                elif not checkbox_dse and checkbox_bam:
+                    manager = SqlParserLogic(
+                        log_callback=self._log_callback,
+                        table_callback=self._table_callback,
+                        stop_event=self.stop_event,
+                    )
+                    manager.main(paths, var_split, var_error_handler)
+                else:
+                    self._log_callback('Ошибка: не выбран ни один модуль обработки', 'red')
+                    return
 
-            if checkbox_result:
-                result = TableTransformation(file_paths)
-                result.main()
+                if checkbox_result:
+                    result = TableTransformation(paths)
+                    result.main()
 
-            self.path_outfile = file_paths
+                self.path_outfile = paths
 
-            if self.stop_event.is_set():
-                self._log_callback("Процесс остановлен пользователем. Результат сохранён.", "orange")
-            else:
-                self._log_callback("Процесс успешно завершен.", "green")
-                self._send_notification(
-                    "Программа завершена",
-                    "Программа завершена, проверьте файл",
-                    16
-                )
+                if self.stop_event.is_set():
+                    self._log_callback("Процесс остановлен пользователем. Результат сохранён.", "orange")
+                else:
+                    self._log_callback("Процесс успешно завершен.", "green")
+                    self._send_notification(
+                        "Программа завершена",
+                        "Программа завершена, проверьте файл",
+                        16
+                    )
 
-            # except Exception as e:
-            #     self._log_callback(f"\nERROR: {str(e)}", "red")
+            except Exception as e:
+                self._log_callback(f"\nERROR: {str(e)}", "red")
 
         self.current_thread = threading.Thread(target=run_logic, daemon=True)
         self.current_thread.start()
@@ -210,16 +234,32 @@ class Backend:
         self._log_callback("Отправлен сигнал остановки...", "orange")
         return {'success': True}
 
+    @staticmethod
+    def _open_path(path):
+        """Кроссплатформенное открытие файла/папки"""
+        if sys.platform.startswith('win'):
+            os.startfile(path)
+        elif sys.platform == 'darwin':
+            subprocess.Popen(['open', path])
+        else:
+            subprocess.Popen(['xdg-open', path])
+
     def open_result_file(self):
-        if self.path_outfile:
-            try:
-                os.startfile(self.path_outfile)
-                self._log_callback("-Файл открыт", "#788084")
-                return {'success': True}
-            except Exception as e:
-                self._log_callback(f"Ошибка при открытии файла: {e}", "red")
-                return {'success': False, 'error': str(e)}
-        return {'success': False, 'error': 'Путь к файлу не указан'}
+        paths = self._normalize_paths(self.path_outfile)
+        if not paths:
+            return {'success': False, 'error': 'Путь к файлу не указан'}
+        try:
+            target = paths[0]
+            # Если это файл — открываем содержащую папку, иначе саму папку
+            if os.path.isfile(target):
+                self._open_path(os.path.dirname(os.path.abspath(target)))
+            else:
+                self._open_path(target)
+            self._log_callback("-Файл открыт", "#788084")
+            return {'success': True}
+        except Exception as e:
+            self._log_callback(f"Ошибка при открытии файла: {e}", "red")
+            return {'success': False, 'error': str(e)}
 
     def open_work_table(self):
         self._table_window_open = not self._table_window_open
