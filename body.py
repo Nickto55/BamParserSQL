@@ -11,7 +11,7 @@ from PIL import Image
 from CTkTable import CTkTable
 from dataclasses import fields
 from PIL._tkinter_finder import tk
-from tkinter import filedialog, END
+from tkinter import filedialog, END, BooleanVar, IntVar
 
 from sql_order_engine import EngineLogic
 from script.env_assets import HandlerEnv
@@ -84,6 +84,35 @@ def send_notification(title, message, name_program, settime=15):
     plyer.notification.notify(title=title, message=message, app_name=name_program, timeout=settime,
                               app_icon=resource_path(path_to_main_ico))
 
+class HelpWindow(ctk.CTkToplevel):
+    def __init__(self, parent=None):
+        super().__init__()
+
+        if parent:
+            self.transient(parent)
+
+        self.title("Справка по использованию")
+        self.geometry('1010x600')
+
+        self.text_edit = ctk.CTkTextbox(self, state="normal", wrap="word")
+        self.text_edit.pack(fill="both", expand=True, padx=20, pady=(20, 10))
+
+        try:
+            from static.help_text import help_text as help_text_str
+            self.text_edit.insert("0.0", help_text_str)
+            self.text_edit.configure(state="disabled")
+
+        except Exception as e:
+            self.text_edit.insert("0.0", f"Ошибка загрузки справки:\n{str(e)}")
+            self.text_edit.configure(state="disabled")
+
+        self.close_btn = ctk.CTkButton(
+            self,
+            text="Закрыть",
+            width=100,
+            command=self.destroy
+        )
+        self.close_btn.pack(side="bottom", anchor="e", padx=20, pady=(0, 20))
 
 class AppGui(ctk.CTk):
 
@@ -97,6 +126,8 @@ class AppGui(ctk.CTk):
         self.geometry(f"{self.window_main_x}x{self.window_main_y}")
         ctk.set_appearance_mode("dark")
 
+        self.var_radiobutton_value_query_split = IntVar(value=1)
+        self.var_bool_error_handler_inside_request_for_swith = BooleanVar(value=True)
         self.management_window()
         self.path_outfile = None
 
@@ -169,6 +200,8 @@ class AppGui(ctk.CTk):
         self._main_frame()
         self._logs_frame()
 
+        self._error_handler_inside_request(self.var_radiobutton_value_query_split.get())
+
     def _sidebar_frame(self):
 
         side_bar_frame = ctk.CTkFrame(
@@ -232,8 +265,7 @@ class AppGui(ctk.CTk):
         )
         checkbox_frame_2.place(
             x=self.indent_frame
-            ,
-            y=self.width_logo_sidebar_frame + 2 * self.height_row_in_frame + 3 * self.indent_frame + 4 * self.indent_frame
+            ,  y=self.width_logo_sidebar_frame + 2 * self.height_row_in_frame + 3 * self.indent_frame + 4 * self.indent_frame
         )
 
         self.checkbox_result = ctk.CTkCheckBox(
@@ -245,6 +277,133 @@ class AppGui(ctk.CTk):
         )
         self.checkbox_result.select(1)
         self.checkbox_result.place(x=self.indent_frame, y=self.indent_frame)
+
+        query_split_size_frame = ctk.CTkFrame(
+            side_bar_frame
+            , width=self.width_sidebar_frame - 2 * self.indent_frame
+            , height=2 * self.height_row_in_frame + 5 * self.indent_frame
+            , fg_color='#1d1e1e'
+        )
+        query_split_size_frame.place(
+            x=self.indent_frame
+            , y=self.width_logo_sidebar_frame + 3 * self.height_row_in_frame + 10 * self.indent_frame
+        )
+
+        question_entry = ctk.CTkLabel(
+            query_split_size_frame
+            , width=self.width_sidebar_frame - 4 * self.indent_frame
+            , height=self.height_row_in_frame
+            , text='Шаг разбиения запроса:             '
+            , fg_color='#1d1e1e'
+        )
+        question_entry.place(
+            x=0
+            , y=self.indent_frame - 2
+        )
+
+        checkbox_query_split_size_1 = ctk.CTkRadioButton(
+            query_split_size_frame
+            , width=self.width_sidebar_frame - 4 * self.indent_frame
+            , height=self.height_row_in_frame
+            , text='1 дсе'
+            , variable=self.var_radiobutton_value_query_split
+            , value=1
+            , radiobutton_width=10
+            , radiobutton_height=10
+            , hover_color='#fff'
+            , command=lambda: self._error_handler_inside_request(1)
+        )
+        checkbox_query_split_size_1.place(
+            x=self.indent_frame
+            , y=self.height_row_in_frame - self.indent_frame
+        )
+
+        checkbox_query_split_size_5 = ctk.CTkRadioButton(
+            query_split_size_frame
+            , width=self.width_sidebar_frame - 4 * self.indent_frame
+            , height=self.height_row_in_frame
+            , text='5 дсе'
+            , variable=self.var_radiobutton_value_query_split
+            , value=5
+            , radiobutton_width=10
+            , radiobutton_height=10
+            , hover_color='#fff'
+            , command=lambda: self._error_handler_inside_request(5)
+        )
+        checkbox_query_split_size_5.place(
+            x=self.indent_frame
+            , y=2 * self.height_row_in_frame - self.indent_frame
+        )
+
+        checkbox_query_split_size_10 = ctk.CTkRadioButton(
+            query_split_size_frame
+            , width=self.width_sidebar_frame - 4 * self.indent_frame
+            , height=self.height_row_in_frame
+            , text='10 дсе'
+            , variable=self.var_radiobutton_value_query_split
+            , value=10
+            , radiobutton_width=10
+            , radiobutton_height=10
+            , hover_color='#fff'
+            , command=lambda: self._error_handler_inside_request(10)
+        )
+        checkbox_query_split_size_10.place(
+            x=(self.width_sidebar_frame - 2 * self.indent_frame) / 2
+            , y=self.height_row_in_frame - self.indent_frame
+        )
+
+        checkbox_query_split_size_all = ctk.CTkRadioButton(
+            query_split_size_frame
+            , width=self.width_sidebar_frame - 4 * self.indent_frame
+            , height=self.height_row_in_frame
+            , text='All'
+            , variable=self.var_radiobutton_value_query_split
+            , value=11
+            , radiobutton_width=10
+            , radiobutton_height=10
+            , hover_color='#fff'
+            , command=lambda: self._error_handler_inside_request(11)
+        )
+        checkbox_query_split_size_all.place(
+            x=(self.width_sidebar_frame - 2 * self.indent_frame) / 2
+            , y=2 * self.height_row_in_frame - self.indent_frame
+        )
+
+        # switch_error_handler_inside_request = ctk.CTkFrame(
+        #     side_bar_frame
+        #     , width=self.width_sidebar_frame - 2 * self.indent_frame
+        #     , height=self.height_row_in_frame + 2 * self.indent_frame
+        #     , fg_color='#1d1e1e'
+        # )
+        # switch_error_handler_inside_request.place(
+        #     x=self.indent_frame
+        #     , y=self.width_logo_sidebar_frame + 5 * self.height_row_in_frame + 16 * self.indent_frame
+        # )
+        #
+        # self.switch_handler_error_inside_requst = ctk.CTkSwitch(
+        #     switch_error_handler_inside_request
+        #     , text='Обработчик ошибок\n внутри запроса'
+        #     , variable=self.var_bool_error_handler_inside_request_for_swith
+        # )
+        # self.switch_handler_error_inside_requst.place(
+        #     x=self.indent_frame
+        #     , y=self.indent_frame
+        # )
+        # self.switch_handler_error_inside_requst.place_forget()
+
+        button_help = ctk.CTkButton(
+            side_bar_frame
+            , width=self.width_sidebar_frame - 2 * self.indent_frame
+            , height=self.height_row_in_frame
+            , text='HELP'
+            , fg_color='green'
+            , hover_color='darkgreen'
+            , command=lambda: HelpWindow(self)
+        )
+        button_help.place(
+            x=self.indent_frame
+            , y=self.width_logo_sidebar_frame + 7 * self.height_row_in_frame + 4 * self.indent_frame
+        )
 
     def _main_frame(self):
         main_frame = ctk.CTkFrame(
@@ -375,6 +534,14 @@ class AppGui(ctk.CTk):
         )
         self.status_text.place(x=self.indent_frame, y=self.indent_frame)
 
+    def _error_handler_inside_request(self, param):
+        if param == 1:
+            self.var_bool_error_handler_inside_request_for_swith.set(True)
+            # self.switch_handler_error_inside_requst.update()
+            # self.switch_handler_error_inside_requst.configure(state='disabled')
+        # else:
+        #     self.switch_handler_error_inside_requst.configure(state="normal")
+
     def stop_execution(self):
         """Отправляет сигнал остановки в рабочий поток"""
         self.stop_event.set()
@@ -386,6 +553,7 @@ class AppGui(ctk.CTk):
             self.table_window.destroy()
         else:
             self.table_window = TableWindow(self)
+            self.table_window._rebuild_table()
 
         self.bool_button_tabel_window = not self.bool_button_tabel_window
 
@@ -403,7 +571,6 @@ class AppGui(ctk.CTk):
     def command_button_open_result(self):
         if not self.path_outfile is None:
             self.start_button.configure(state="disabled")
-            self.button_open_result_tabel.configure(fg_color='green', hover_color='darkgreen')
 
             def merge_color():
                 self.button_open_result_tabel.configure(fg_color='#8f764f', hover_color='#5c4b32')
@@ -580,6 +747,8 @@ class AppGui(ctk.CTk):
                 log_callback=self.log,
                 table_callback=self.table_callback,
                 stop_event=self.stop_event
+                , var_radiobutton_value_query_split=self.var_radiobutton_value_query_split
+                , var_bool_error_handler_inside_request_for_swith=self.var_bool_error_handler_inside_request_for_swith
             )
             manager.main(self.reply_path_entry.get())
         elif self.checkbox_dse_order.get() and not self.checkbox_bam_parser.get():
@@ -591,7 +760,8 @@ class AppGui(ctk.CTk):
                 table_callback=self.table_callback,
                 stop_event=self.stop_event
             )
-            manager.main(self.reply_path_entry.get())
+            manager.main(self.reply_path_entry.get(), self.var_radiobutton_value_query_split,
+                         self.var_bool_error_handler_inside_request_for_swith)
         else:
             self.log(f'Произошла ошибка: {self.checkbox_dse_order.get()} {self.checkbox_bam_parser.get()}')
 
@@ -610,6 +780,7 @@ class AppGui(ctk.CTk):
                                                 y=self.indent_frame)
         else:
             self.log("Процесс успешно завершен.", color_log="green")
+            self.button_stop_program.place_forget()
             self.button_open_folder_reply.place(x=self.width_name_entry + self.width_path_entry + 3 * self.indent_frame,
                                                 y=self.indent_frame)
             send_notification(
@@ -635,24 +806,18 @@ class AppGui(ctk.CTk):
 class TableWindow(ctk.CTkToplevel):
     def __init__(self, param):
         super().__init__(param)
-        self.title('Полученные данные')
-        self.geometry('1565x600')
 
         self.headers = [
             "Дсе", "ТП не в архиве", "ДСЕ без маршрутов",
             "ДСЕ без основного материала", "Дсе без трудоемкости",
             "Всего нет УП", "Наименование изделия (ИС)"
         ]
-
         self.scroll_frame = ctk.CTkScrollableFrame(
             self,
             width=1525,
             height=560
         )
-        self.scroll_frame.pack(expand=True, fill='both', padx=20, pady=20)
-
         self.tabel_data = [self.headers]
-
         self.table = CTkTable(
             master=self.scroll_frame,
             row=1,
@@ -662,12 +827,17 @@ class TableWindow(ctk.CTkToplevel):
             header_color="#1f538d",
             wraplength=200
         )
-        self.table.pack(expand=True, fill='both')
-
         self._row_count = 1
+
+    def gui(self):
+        self.title('Полученные данные')
+        self.geometry('1565x600')
+        self.scroll_frame.pack(expand=True, fill='both', padx=20, pady=20)
+        self.table.pack(expand=True, fill='both')
 
     def add_row(self, row_data):
         """Добавляет новую строку в таблицу без полного пересоздания"""
+
         row_list = [str(row_data.get(col, "")) for col in self.headers]
         self.tabel_data.append(row_list)
 
@@ -685,6 +855,7 @@ class TableWindow(ctk.CTkToplevel):
 
     def _rebuild_table(self):
         """Пересоздание таблицы (только при необходимости)"""
+        self.gui()
         try:
             self.table.destroy()
             self.table = CTkTable(

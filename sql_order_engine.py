@@ -7,10 +7,20 @@ from script.excel_reader import ExcelReader
 
 
 class EngineLogic:
-    def __init__(self, log_callback=None, table_callback=None, stop_event=None):
+    def __init__(
+            self
+            , log_callback=None
+            , table_callback=None
+            , stop_event=None
+            , var_radiobutton_value_query_split=None
+            , var_bool_error_handler_inside_request_for_swith=None
+    ):
         self.path_to_file = None
         self.sheet_names = None
         self.stop_event = stop_event
+
+        self.var_radiobutton_value_query_split = var_radiobutton_value_query_split
+        self.var_bool_error_handler_inside_request_for_swith = var_bool_error_handler_inside_request_for_swith
 
         self.callback_gui_log = log_callback
         if log_callback:
@@ -40,7 +50,7 @@ class EngineLogic:
                 self.log_program('Обнаружен лист "Изделия"', color_log="#ACA6A0")
                 self.log_program('<запуск Bam parser SQL>', color_log='#847E78')
                 # try:
-                self.bam_parser_sql.main(self.path_to_file)
+                self.bam_parser_sql.main(self.path_to_file, self.var_radiobutton_value_query_split, self.var_bool_error_handler_inside_request_for_swith)
                 # except Exception as e:
                 #     self.log_program(f'Error EngineLogic main sheet in file: {e}', color_log='red')
             else:
@@ -49,7 +59,7 @@ class EngineLogic:
                 # try:
                 self.dse_order_manager.main(self.path_to_file)
                 self.log_program('<запуск Bam parser SQL>', color_log='#847E78')
-                self.bam_parser_sql.main(self.path_to_file)
+                self.bam_parser_sql.main(self.path_to_file, self.var_radiobutton_value_query_split, self.var_bool_error_handler_inside_request_for_swith)
                 # except Exception as e:
                 #     self.log_program(f'Обработчик SQl parser engine.', color_log='red')
                 #     self.log_program(f'Error EngineLogic main: {e}', color_log='red')
