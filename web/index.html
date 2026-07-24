@@ -1,1 +1,147 @@
-<placeholder>
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQL Order Engine</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
+
+    <div class="app-container">
+        <!-- SIDEBAR -->
+        <aside class="sidebar">
+            <div class="logo-container">
+                <img id="logo-img" src="" alt="Logo" class="logo">
+                <div class="app-title">
+                    <span class="app-name">SQL Order Engine</span>
+                    <span class="app-sub">BamParserSQL</span>
+                </div>
+            </div>
+
+            <!-- Модули -->
+            <div class="panel">
+                <div class="panel-title">Модули</div>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="chk-dse" checked>
+                    <span class="checkmark"></span>
+                    Dse order manager
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="chk-bam" checked>
+                    <span class="checkmark"></span>
+                    Bam parser SQL
+                </label>
+            </div>
+
+            <!-- Результат -->
+            <div class="panel">
+                <div class="panel-title">Результат</div>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="chk-result" checked>
+                    <span class="checkmark"></span>
+                    Generate table summary
+                </label>
+            </div>
+
+            <!-- Шаг разбиения -->
+            <div class="panel">
+                <div class="panel-title">Шаг разбиения запроса:</div>
+                <div class="radio-group">
+                    <label class="radio-label">
+                        <input type="radio" name="query-split" value="1" checked>
+                        <span>1 дсе</span>
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="query-split" value="5">
+                        <span>5 дсе</span>
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="query-split" value="10">
+                        <span>10 дсе</span>
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="query-split" value="11">
+                        <span>All</span>
+                    </label>
+                </div>
+            </div>
+
+            <button class="btn-help" onclick="openHelp()">HELP</button>
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <main class="main-content">
+            <!-- Top Bar -->
+            <div class="top-bar">
+                <div class="file-inputs">
+                    <input type="text" id="file-name" class="input-name" value="Файл" readonly>
+                    <input type="text" id="file-path" class="input-path" placeholder="Введите путь к файлу/файлам отчетов">
+                    <button class="btn-open" onclick="selectFiles()">Открыть</button>
+                </div>
+
+                <div class="action-buttons">
+                    <button class="btn-work" onclick="toggleWorkTable()">Таблица обр. дсе</button>
+                    <button class="btn-start" id="btn-start" onclick="startProcessing()">Начать</button>
+                    <button class="btn-stop" id="btn-stop" onclick="stopProcessing()" style="display:none;">
+                        Прекратить, сохранить результат
+                    </button>
+                    <button class="btn-result" id="btn-result" onclick="openResult()" style="display:none;">
+                        Открыть результат
+                    </button>
+                </div>
+
+                <!-- Progress Bar -->
+                <div class="progress-container" id="progress-container" style="display:none;">
+                    <div class="progress-bar" id="progress-bar"></div>
+                </div>
+            </div>
+
+            <!-- Logs -->
+            <div class="logs-container">
+                <div class="logs-header">
+                    <span class="logs-dot"></span>
+                    <span class="logs-title">CONSOLE</span>
+                </div>
+                <div id="status-text" class="status-text"></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Help Modal -->
+    <div class="modal" id="help-modal" style="display:none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Справка по использованию</h2>
+                <button class="btn-close" onclick="closeHelp()">×</button>
+            </div>
+            <div class="modal-body" id="help-text"></div>
+            <div class="modal-footer">
+                <button class="btn-close-modal" onclick="closeHelp()">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table Modal -->
+    <div class="modal" id="table-modal" style="display:none;">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h2>Полученные данные</h2>
+                <button class="btn-close" onclick="toggleWorkTable()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="table-container" id="table-container">
+                    <table id="data-table">
+                        <thead id="table-head"></thead>
+                        <tbody id="table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
