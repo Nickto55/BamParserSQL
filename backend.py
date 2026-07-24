@@ -1,16 +1,13 @@
 import os
 import sys
 import threading
-import queue
 import time
 import pandas as pd
 import plyer
-from tkinter import filedialog
 import tkinter as tk
-
-# Скрытое окно tkinter для диалогов
-_root = tk.Tk()
-_root.withdraw()
+from tkinter import filedialog
+import queue
+import uuid
 
 from dataclasses import fields
 from script.env_assets import HandlerEnv
@@ -19,6 +16,50 @@ from bam_parcer_sql import SqlParserLogic
 from dse_order_manager import DseOrderLogic
 from script.excel_return import TableTransformation
 from handlings.handling_config import ConfigMainProgram
+
+# ==============================================================================
+# ГЛОБАЛЬНАЯ НАСТРОЙКА TKINTER ДЛЯ РАБОТЫ С FASTAPI
+# ==============================================================================
+_tk_request_queue = queue.Queue()
+_tk_response_dict = {}
+
+
+def _tkinter_worker():
+    """
+    Фоновый поток, который единолично управляет Tkinter.
+    Он постоянно опрашивает очередь и обновляет интерфейс.
+    """
+    root = tk.Tk()
+    root.withdraw()
+
+    while True:
+        try:
+            if not _tk_request_queue.empty():
+                req = _tk_request_queue.get_nowait()
+                req_id = req['id']
+
+                if req['action'] == 'select_files':
+                    filepaths = filedialog.askopenfilenames(
+                        title=f"Выберите Excel файлы для {req['name']}",
+                        filetypes=(("Excel files", "*.xlsx *.xls *.xlsm"), ("All files", "*.*"))
+                    )
+                    _tk_response_dict[req_id] = list(filepaths) if filepaths else []
+
+                _tk_request_queue.task_done()
+
+            root.update()
+            time.sleep(0.05)
+
+        except tk.TclError:
+            break
+        except Exception as e:
+            print(f"Ошибка в потоке Tkinter: {e}")
+            break
+
+
+_tk_thread = threading.Thread(target=_tkinter_worker, daemon=True)
+_tk_thread.start()
+
 
 
 class Backend:
@@ -35,25 +76,20 @@ class Backend:
         ]
         self.log_messages = []
         self._table_window_open = False
+        self._callbacks = []
 
     def get_resource_path(self, relative_path):
-        """Возвращает абсолютный путь к ресурсу"""
         if hasattr(sys, '_MEIPASS'):
             return os.path.join(sys._MEIPASS, relative_path)
         return os.path.join(os.path.abspath("."), relative_path)
 
     def check_dependencies(self):
-        """Проверка .env файла"""
         env = HandlerEnv()
         value = []
         for i, field in enumerate(fields(env.config)):
             value.append(getattr(env.config, field.name))
 
-        CONFIG_DIR = os.path.join(
-            os.path.expanduser("~"),
-            "configs",
-            ".BamParserSQL"
-        )
+        CONFIG_DIR = os.path.join(os.path.expanduser("~"), "configs", ".BamParserSQL")
         file_path = os.path.join(CONFIG_DIR, ".env")
 
         if None in value or '' in value:
@@ -66,24 +102,31 @@ class Backend:
         return {'success': True}
 
     def select_files(self, name):
-        """Диалог выбора файлов"""
-        filepaths = filedialog.askopenfilenames(
-            title=f"Выберите Excel файлы для {name}",
-            filetypes=(("Excel files", "*.xlsx *.xls *.xlsm"), ("All files", "*.*"))
-        )
+        """
+        Безопасный вызов диалога выбора файлов из потока FastAPI.
+        Отправляет запрос в очередь Tkinter и ждет ответа.
+        """
+        req_id = str(uuid.uuid4())
+        _tk_request_queue.put({'id': req_id, 'action': 'select_files', 'name': name})
+        timeout = 60
+        start_time = time.time()
+        while req_id not in _tk_response_dict:
+            if time.time() - start_time > timeout:
+                return {'success': False, 'error': 'Превышено время ожидания выбора файла'}
+            time.sleep(0.1)
+
+        filepaths = _tk_response_dict.pop(req_id)
         if not filepaths:
             return {'success': False, 'paths': []}
 
-        paths = list(filepaths)
         return {
             'success': True,
-            'paths': paths,
-            'name': os.path.basename(paths[0]) if paths else '',
-            'str_paths': ', '.join(paths)
+            'paths': filepaths,
+            'name': os.path.basename(filepaths[0]) if filepaths else '',
+            'str_paths': ', '.join(filepaths)
         }
 
     def test_db_connection(self):
-        """Проверка подключения к БД"""
         try:
             from script.scr_cmd_run import ScriptCmd
             test_bd_connect = ScriptCmd(log_callback=self._log_callback)
@@ -92,108 +135,82 @@ class Backend:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
-    def _log_callback(self, message, color_log=None):
-        """Внутренний колбэк для логов"""
-        self.log_messages.append({'message': message, 'color': color_log})
-        # Отправляем лог на фронтенд
-        try:
-            import eel
-            eel.receiveLog(message, color_log)
-        except:
-            pass
+    def _log_callback(self, message, color_log=None, **kwargs):
+        entry = {'message': message, 'color': color_log, 'timestamp': time.time()}
+        self.log_messages.append(entry)
 
     def _table_callback(self, row_data):
-        """Колбэк для данных таблицы"""
         self.table_data.append(row_data)
-        try:
-            import eel
-            eel.receiveTableRow(row_data)
-        except:
-            pass
 
     def start_processing(self, file_paths, options):
-        """Запуск обработки"""
         self.stop_event.clear()
         self.log_messages = []
         self.table_data = []
         self.path_outfile = None
 
         def run_logic():
-            try:
-                self._log_callback("Начало работы...")
+            # try:
+            self._log_callback("Начало работы...")
 
-                var_split = options.get('query_split', 1)
-                var_error_handler = options.get('error_handler', True)
+            var_split = options.get('query_split', 1)
+            var_error_handler = options.get('error_handler', True)
 
-                checkbox_dse = options.get('dse_order', True)
-                checkbox_bam = options.get('bam_parser', True)
-                checkbox_result = options.get('generate_table', True)
+            checkbox_dse = options.get('dse_order', True)
+            checkbox_bam = options.get('bam_parser', True)
+            checkbox_result = options.get('generate_table', True)
 
-                if checkbox_dse and checkbox_bam:
-                    manager = EngineLogic(
-                        log_callback=self._log_callback,
-                        table_callback=self._table_callback,
-                        stop_event=self.stop_event,
-                        var_radiobutton_value_query_split=var_split,
-                        var_bool_error_handler_inside_request_for_swith=var_error_handler
-                    )
-                    manager.main(file_paths)
-                elif checkbox_dse and not checkbox_bam:
-                    manager = DseOrderLogic()
-                    manager.main(file_paths)
-                elif not checkbox_dse and checkbox_bam:
-                    manager = SqlParserLogic(
-                        log_callback=self._log_callback,
-                        table_callback=self._table_callback,
-                        stop_event=self.stop_event
-                    )
-                    manager.main(file_paths, var_split, var_error_handler)
-                else:
-                    self._log_callback(f'Произошла ошибка: {checkbox_dse} {checkbox_bam}', 'red')
-                    return
+            if checkbox_dse and checkbox_bam:
+                manager = EngineLogic(
+                    log_callback=self._log_callback,
+                    table_callback=self._table_callback,
+                    stop_event=self.stop_event,
+                    var_radiobutton_value_query_split=var_split,
+                    var_bool_error_handler_inside_request_for_swith=var_error_handler
+                )
+                manager.main(file_paths)
+            elif checkbox_dse and not checkbox_bam:
+                manager = DseOrderLogic()
+                manager.main(file_paths)
+            elif not checkbox_dse and checkbox_bam:
+                manager = SqlParserLogic(
+                    log_callback=self._log_callback,
+                    table_callback=self._table_callback,
+                    stop_event=self.stop_event,
+                )
+                manager.main(file_paths, var_split, var_error_handler)
+            else:
+                self._log_callback(f'Произошла ошибка: {checkbox_dse} {checkbox_bam}', 'red')
+                return
 
-                if checkbox_result:
-                    result = TableTransformation(file_paths)
-                    result.main()
+            if checkbox_result:
+                result = TableTransformation(file_paths)
+                result.main()
 
-                self.path_outfile = file_paths
+            self.path_outfile = file_paths
 
-                if self.stop_event.is_set():
-                    self._log_callback("Процесс остановлен пользователем. Результат сохранён.", "orange")
-                else:
-                    self._log_callback("Процесс успешно завершен.", "green")
-                    self._send_notification(
-                        "Программа завершена",
-                        "Программа завершена, проверьте файл",
-                        16
-                    )
+            if self.stop_event.is_set():
+                self._log_callback("Процесс остановлен пользователем. Результат сохранён.", "orange")
+            else:
+                self._log_callback("Процесс успешно завершен.", "green")
+                self._send_notification(
+                    "Программа завершена",
+                    "Программа завершена, проверьте файл",
+                    16
+                )
 
-                try:
-                    import eel
-                    eel.processingFinished(self.path_outfile, self.stop_event.is_set())
-                except:
-                    pass
-
-            except Exception as e:
-                self._log_callback(f"\nERROR: dsf {str(e)}", "red")
-                try:
-                    import eel
-                    eel.processingFinished(None, True)
-                except:
-                    pass
+            # except Exception as e:
+            #     self._log_callback(f"\nERROR: {str(e)}", "red")
 
         self.current_thread = threading.Thread(target=run_logic, daemon=True)
         self.current_thread.start()
         return {'success': True}
 
     def stop_processing(self):
-        """Остановка обработки"""
         self.stop_event.set()
         self._log_callback("Отправлен сигнал остановки...", "orange")
         return {'success': True}
 
     def open_result_file(self):
-        """Открыть файл результата"""
         if self.path_outfile:
             try:
                 os.startfile(self.path_outfile)
@@ -205,7 +222,6 @@ class Backend:
         return {'success': False, 'error': 'Путь к файлу не указан'}
 
     def open_work_table(self):
-        """Переключить видимость таблицы"""
         self._table_window_open = not self._table_window_open
         return {
             'success': True,
@@ -215,14 +231,12 @@ class Backend:
         }
 
     def get_table_data(self):
-        """Получить данные таблицы"""
         return {
             'headers': self.table_headers,
             'data': self.table_data
         }
 
     def get_help_text(self):
-        """Получить текст справки"""
         try:
             from static.help_text import help_text as help_text_str
             return {'success': True, 'text': help_text_str}
@@ -230,7 +244,6 @@ class Backend:
             return {'success': False, 'error': str(e), 'text': f"Ошибка загрузки справки:\n{str(e)}"}
 
     def _send_notification(self, title, message, timeout=15):
-        """Отправить уведомление"""
         try:
             ico_path = self.get_resource_path('static/ico/bam-parcer-sql.ico')
             plyer.notification.notify(
@@ -240,5 +253,5 @@ class Backend:
                 timeout=timeout,
                 app_icon=ico_path
             )
-        except:
+        except Exception:
             pass
