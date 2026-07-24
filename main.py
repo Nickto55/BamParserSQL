@@ -40,7 +40,7 @@ def main():
     
     # Запускаем
     webview.start(
-        debug=False,  # True для отладки (откроет DevTools)
+        debug=True,  # True для отладки (откроет DevTools)
         gui='edgechromium'  # edgechromium на Windows, cocoa на macOS, gtk на Linux
     )
 

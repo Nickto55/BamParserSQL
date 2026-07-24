@@ -4,7 +4,9 @@ from pydantic import BaseModel
 from typing import List, Optional, Union
 import uvicorn
 import threading
-
+import  pandas as pd
+import  math
+from fastapi.encoders import jsonable_encoder
 app = FastAPI()
 
 # CORS для доступа из webview
@@ -79,7 +81,20 @@ def toggle_table():
 
 @app.get("/api/table-data")
 def get_table_data():
-    return backend_instance.get_table_data()
+    data = backend_instance.get_table_data()
+
+    # 2. Функция для рекурсивной очистки структуры от NaN
+    def clean_nan(value):
+        if isinstance(value, float) and math.isnan(value):
+            return None
+        if isinstance(value, dict):
+            return {k: clean_nan(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [clean_nan(item) for item in value]
+        return value
+
+    # 3. Возвращаем полностью очищенные данные
+    return clean_nan(data)
 
 
 @app.get("/api/help-text")
