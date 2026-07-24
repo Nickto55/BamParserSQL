@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>SQL Order Engine</title>
+<style>
+    /* ==================================================================
+       SPLASH SCREEN — автономный, без внешних зависимостей
+       Стиль иконки: navy + неоновый циан + оранжевый акцент
+       ================================================================== */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+        height: 100%;
+        overflow: hidden;
+        background: #02101f;
+        font-family: 'Segoe UI', Tahoma, sans-serif;
+        user-select: none;
+        cursor: default;
+    }
+
+    body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* фоновые свечения */
+    .glow {
+        position: fixed;
+        border-radius: 50%;
+        filter: blur(130px);
+        pointer-events: none;
+    }
+    .glow-1 {
+        width: 500px; height: 500px;
+        top: -160px; right: -140px;
+        background: rgba(53, 224, 230, 0.12);
+        animation: glowFloat 6s ease-in-out infinite;
+    }
+    .glow-2 {
+        width: 420px; height: 420px;
+        bottom: -150px; left: -100px;
+        background: rgba(255, 138, 61, 0.08);
+        animation: glowFloat 7s ease-in-out infinite reverse;
+    }
+    @keyframes glowFloat {
+        0%, 100% { transform: translate(0, 0); }
+        50% { transform: translate(-30px, 20px); }
+    }
+
+    /* вертикальный луч как на иконке */
+    .beam {
+        position: fixed;
+        top: -10%;
+        left: 50%;
+        width: 120px;
+        height: 120%;
+        transform: translateX(-50%);
+        background: linear-gradient(180deg,
+            transparent 0%,
+            rgba(53, 224, 230, 0.06) 30%,
+            rgba(53, 224, 230, 0.14) 50%,
+            rgba(53, 224, 230, 0.06) 70%,
+            transparent 100%);
+        filter: blur(8px);
+        pointer-events: none;
+    }
+
+    .splash {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 26px;
+        z-index: 1;
+        animation: fadeIn 0.5s ease-out;
+    }
+    @keyframes fadeIn {
+        from { opacity: 0; transform: scale(0.96); }
+        to { opacity: 1; transform: scale(1); }
+    }
+
+    /* логотип с вращающимися кольцами */
+    .logo-wrap {
+        position: relative;
+        width: 190px;
+        height: 190px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .ring {
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        background: conic-gradient(
+            from 0deg,
+            transparent 0deg,
+            rgba(53, 224, 230, 0.1) 60deg,
+            #35e0e6 180deg,
+            rgba(53, 224, 230, 0.1) 300deg,
+            transparent 360deg
+        );
+        -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+        mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+        animation: spin 2.2s linear infinite;
+        filter: drop-shadow(0 0 6px rgba(53, 224, 230, 0.6));
+    }
+    .ring-2 {
+        inset: 14px;
+        animation: spin 3.4s linear infinite reverse;
+        opacity: 0.5;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .logo {
+        width: 128px;
+        height: 128px;
+        border-radius: 28px;
+        object-fit: contain;
+        border: 1px solid rgba(53, 224, 230, 0.4);
+        animation: logoPulse 2.2s ease-in-out infinite;
+    }
+    @keyframes logoPulse {
+        0%, 100% {
+            box-shadow: 0 0 24px rgba(53, 224, 230, 0.45), 0 0 70px rgba(53, 224, 230, 0.18);
+        }
+        50% {
+            box-shadow: 0 0 34px rgba(53, 224, 230, 0.7), 0 0 90px rgba(53, 224, 230, 0.3);
+        }
+    }
+
+    /* текст */
+    .title-block {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+    }
+    .app-name {
+        font-size: 26px;
+        font-weight: 700;
+        letter-spacing: 1.5px;
+        color: #e8fbfd;
+        text-shadow: 0 0 18px rgba(53, 224, 230, 0.55);
+    }
+    .app-sub {
+        font-size: 12px;
+        letter-spacing: 5px;
+        text-transform: uppercase;
+        color: #ff8a3d;
+        text-shadow: 0 0 12px rgba(255, 138, 61, 0.5);
+    }
+
+    /* прогресс */
+    .loader {
+        width: 260px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+    }
+    .bar-track {
+        width: 100%;
+        height: 4px;
+        border-radius: 2px;
+        background: rgba(53, 224, 230, 0.12);
+        overflow: hidden;
+        position: relative;
+    }
+    .bar-fill {
+        position: absolute;
+        top: 0; left: 0;
+        height: 100%;
+        width: 35%;
+        border-radius: 2px;
+        background: linear-gradient(90deg, transparent, #35e0e6, transparent);
+        box-shadow: 0 0 12px #35e0e6;
+        animation: sweep 1.4s ease-in-out infinite;
+    }
+    @keyframes sweep {
+        0% { left: -35%; }
+        100% { left: 100%; }
+    }
+
+    .status {
+        font-family: 'Consolas', monospace;
+        font-size: 12px;
+        color: #4d7d8a;
+        letter-spacing: 1px;
+        min-height: 16px;
+        transition: opacity 0.3s;
+    }
+    .status .accent { color: #57bcbf; }
+
+    /* версия в углу */
+    .version {
+        position: fixed;
+        bottom: 14px;
+        right: 18px;
+        font-size: 10px;
+        letter-spacing: 2px;
+        color: #2a4a55;
+    }
+</style>
+</head>
+<body>
+    <div class="glow glow-1"></div>
+    <div class="glow glow-2"></div>
+    <div class="beam"></div>
+
+    <div class="splash">
+        <div class="logo-wrap">
+            <div class="ring"></div>
+            <div class="ring ring-2"></div>
+            <img class="logo" src="../static/png/bam-parcer-sql.png" alt="SQL Order Engine">
+        </div>
+
+        <div class="title-block">
+            <span class="app-name">SQL Order Engine</span>
+            <span class="app-sub">BamParserSQL</span>
+        </div>
+
+        <div class="loader">
+            <div class="bar-track"><div class="bar-fill"></div></div>
+            <div class="status" id="status-text">Инициализация<span class="accent">...</span></div>
+        </div>
+    </div>
+
+    <div class="version">v2.0 WEB</div>
+
+<script>
+    // Смена статусных сообщений — чисто визуально, реальным переключением
+    // управляет main.py (load_url при готовности сервера)
+    (function () {
+        var messages = [
+            'Инициализация<span class="accent">...</span>',
+            'Запуск ядра<span class="accent">...</span>',
+            'Подключение к БД<span class="accent">...</span>',
+            'Загрузка интерфейса<span class="accent">...</span>'
+        ];
+        var i = 0;
+        var el = document.getElementById('status-text');
+        setInterval(function () {
+            i = (i + 1) % messages.length;
+            el.style.opacity = '0';
+            setTimeout(function () {
+                el.innerHTML = messages[i];
+                el.style.opacity = '1';
+            }, 300);
+        }, 1600);
+    })();
+</script>
+</body>
+</html>
