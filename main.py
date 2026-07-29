@@ -1,42 +1,36 @@
-import webview
 import os
 import sys
 import time
-import threading
-import urllib.request
-
+import random
 from pathlib import Path
+
+import webview
+
+if getattr(sys, 'frozen', False):
+    BASE_DIR = Path(sys._MEIPASS)
+else:
+    BASE_DIR = Path(__file__).parent
+
+WEB_DIR = BASE_DIR / "web"
+
 from backend import Backend
-from api_server import start_server
-
-# Порт для API сервера
-API_PORT = 8765
-API_URL = f'http://127.0.0.1:{API_PORT}/api'
-
-# Минимальное время показа сплэш-экрана (сек)
-SPLASH_MIN_TIME = 3.0
-# Максимальное ожидание готовности сервера (сек)
-SERVER_TIMEOUT = 30
-
-# Размеры окон
-SPLASH_SIZE = (400, 500)
-MAIN_SIZE = (950, 730)
 
 
-class WindowApi:
+class Api:
     """
-    JS-API для управления окном из фронтенда.
-    Методы доступны в JS как pywebview.api.<method>()
+    JS-API: доступен в JS как pywebview.api.<method>()
+    Проксирует вызовы в Backend + управляет окном.
     """
 
     def __init__(self):
-        self.window = None
+        self._window = None
+        self.backend = Backend()
         self._pos = {'x': None, 'y': None}
         self._drag = None
 
-    def attach(self, window):
-        """Привязка окна и подписка на события перемещения"""
-        self.window = window
+    def set_window(self, window):
+        """Устанавливаем ссылку на окно после создания"""
+        self._window = window
         try:
             window.events.moved += self._on_moved
         except Exception:
@@ -46,134 +40,129 @@ class WindowApi:
         self._pos['x'] = x
         self._pos['y'] = y
 
-    def minimize(self):
-        if self.window:
-            self.window.minimize()
+    # ========== КНОПКИ ОКНА ==========
 
-    def close_app(self):
-        """Закрыть приложение целиком (все окна)"""
+    def minimize_window(self):
+        """Свернуть окно"""
+        if self._window:
+            self._window.minimize()
+        return True
+
+    def close_window(self):
+        """Закрыть окно и завершить приложение"""
         for w in list(webview.windows):
             try:
                 w.destroy()
             except Exception:
                 pass
+        return True
 
-    def _current_pos(self):
-        x, y = self._pos['x'], self._pos['y']
-        if x is None:
-            x = getattr(self.window, 'x', None)
-            y = getattr(self.window, 'y', None)
-        return x, y
+    # ========== ПЕРЕТАСКИВАНИЕ FRAMELESS-ОКНА ==========
 
     def drag_start(self, sx, sy):
-        x, y = self._current_pos()
+        x, y = self._pos['x'], self._pos['y']
+        if x is None:
+            x = getattr(self._window, 'x', None)
+            y = getattr(self._window, 'y', None)
         if x is not None:
             self._drag = (sx, sy, x, y)
 
     def drag_move(self, sx, sy):
-        if self._drag and self.window:
+        if self._drag and self._window:
             sx0, sy0, wx, wy = self._drag
-            self.window.move(int(wx + (sx - sx0)), int(wy + (sy - sy0)))
+            self._window.move(int(wx + (sx - sx0)), int(wy + (sy - sy0)))
 
     def drag_end(self):
         self._drag = None
 
+    # ========== ПРОКСИ К BACKEND ==========
 
-def get_web_dir():
-    """Путь к папке web (с учётом PyInstaller)"""
-    if hasattr(sys, '_MEIPASS'):
-        return os.path.join(sys._MEIPASS, 'web')
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'web')
+    def check_dependencies(self):
+        return self.backend.check_dependencies()
 
+    def test_db_connection(self):
+        return self.backend.test_db_connection()
 
-def get_screen_size():
-    """Размер экрана (Windows -> ctypes, иначе запасной вариант)"""
-    try:
-        import ctypes
-        return (ctypes.windll.user32.GetSystemMetrics(0),
-                ctypes.windll.user32.GetSystemMetrics(1))
-    except Exception:
-        return 1920, 1080
+    def get_logo(self):
+        return self.backend.get_logo()
 
+    def select_files(self, name):
+        return self.backend.select_files(name)
 
-def wait_for_server(timeout=SERVER_TIMEOUT):
-    """Ждём, пока API-сервер начнёт отвечать"""
-    start = time.time()
-    while time.time() - start < timeout:
-        try:
-            with urllib.request.urlopen(f'{API_URL}/status', timeout=1) as resp:
-                if resp.status == 200:
-                    return True
-        except Exception:
-            time.sleep(0.15)
-    return False
+    def start_processing(self, file_paths, options):
+        return self.backend.start_processing(file_paths, options)
 
+    def stop_processing(self):
+        return self.backend.stop_processing()
 
-def boot(window, backend, web_dir, started_at):
-    """
-    Фоновая загрузка: поднимаем сервер, ждём его готовности,
-    затем ЭТО ЖЕ окно расширяем до основного размера и грузим интерфейс.
-    """
-    start_server(backend, port=API_PORT)
+    def open_result_file(self):
+        return self.backend.open_result_file()
 
-    server_ok = wait_for_server()
+    def get_table_data(self):
+        return self.backend.get_table_data()
 
-    # Держим сплэш минимум SPLASH_MIN_TIME
-    elapsed = time.time() - started_at
-    if elapsed < SPLASH_MIN_TIME:
-        time.sleep(SPLASH_MIN_TIME - elapsed)
+    def get_help_text(self):
+        return self.backend.get_help_text()
 
-    # Расширяем окно до основного размера и центрируем
-    try:
-        w, h = MAIN_SIZE
-        sw, sh = get_screen_size()
-        window.resize(w, h)
-        window.move((sw - w) // 2, (sh - h) // 2)
-    except Exception as e:
-        print(f'[SQL Order Engine] Не удалось изменить размер окна: {e}')
+    def get_logs(self):
+        return self.backend.log_messages
 
-    # Грузим основной интерфейс в то же окно.
-    # ВАЖНО: не создаём второе окно из этого потока — на WinForms/edgechromium
-    # это приводит к дедлоку (exit code -805306369) и ошибке рекурсии
-    # AccessibilityObject.Bounds в мосте JS-API.
-    index_path = os.path.join(web_dir, 'index.html')
-    window.load_url(f'file:///{index_path.replace(os.sep, "/")}')
-
-    if not server_ok:
-        print('[SQL Order Engine] ВНИМАНИЕ: сервер не ответил вовремя')
+    def get_status(self):
+        return {
+            'is_processing': self.backend.current_thread is not None
+                             and self.backend.current_thread.is_alive(),
+            'path_outfile': self.backend.path_outfile,
+            'table_open': self.backend._table_window_open
+        }
 
 
 def main():
-    started_at = time.time()
+    api = Api()
 
-    backend = Backend()
+    splash_path = WEB_DIR / "splash.html"
+    main_path = WEB_DIR / "index.html"
 
-    web_dir = get_web_dir()
-    splash_path = os.path.join(web_dir, 'splash.html')
-
-    # JS-API для кнопок окна (свернуть / закрыть / перетаскивание)
-    window_api = WindowApi()
-
-    # ЕДИНСТВЕННОЕ окно: стартует как сплэш, затем трансформируется в главное
-    window = webview.create_window(
+    # Сплэш-окно: маленькое, поверх всех, без рамки
+    splash = webview.create_window(
         title='SQL Order Engine',
         url=str(splash_path),
-        width=SPLASH_SIZE[0],
-        height=SPLASH_SIZE[1],
+        width=400,
+        height=500,
         resizable=False,
         frameless=True,
-        text_select=False,
+        on_top=True,
         confirm_close=False,
-        js_api=window_api
+        js_api=api  # кнопка ✕ на сплэше вызывает close_window
     )
-    window_api.attach(window)
 
-    # Сервер и переключение интерфейса — ПОСЛЕ старта GUI-цикла
+    # Главное окно: скрыто до загрузки интерфейса
+    main_window = webview.create_window(
+        title='SQL Order Engine',
+        url=str(main_path),
+        width=950,
+        height=730,
+        resizable=False,
+        frameless=True,
+        js_api=api,
+        text_select=False,
+        hidden=True
+    )
+
+    # Передаём ссылку на окно в API
+    api.set_window(main_window)
+
+    def on_loaded():
+        time_sleep_main_window = random.randint(2, 3)
+        time.sleep(time_sleep_main_window)
+        splash.destroy()
+        main_window.show()
+        main_window.restore()
+
+    main_window.events.loaded += on_loaded
+
     webview.start(
-        boot,
-        args=(window, backend, web_dir, started_at),
         debug=True,  # True для отладки (откроет DevTools)
-        gui='edgechromium'  # edgechromium на Windows, cocoa на macOS, gtk на Linux
+        gui='edgechromium'
     )
 
 
