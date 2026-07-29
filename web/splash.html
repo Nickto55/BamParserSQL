@@ -252,15 +252,15 @@
     <div class="version">v2.0 WEB</div>
 
 <script>
-    // Закрытие приложения (окно frameless — WindowApi из main.py)
+    // Закрытие приложения (окно frameless — Api из main.py)
     function closeApp() {
         if (typeof window.pywebview !== 'undefined' && window.pywebview.api) {
-            window.pywebview.api.close_app();
+            window.pywebview.api.close_window();
         }
     }
 
     // Смена статусных сообщений — чисто визуально, реальным переключением
-    // управляет main.py
+    // управляет main.py (events.loaded)
     (function () {
         var messages = [
             'Инициализация<span class="accent">...</span>',

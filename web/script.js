@@ -1,6 +1,3 @@
-// === CONFIG ===
-const API_BASE = 'http://127.0.0.1:8765/api';
-
 // === STATE ===
 let isProcessing = false;
 let isTableOpen = false;
@@ -8,12 +5,11 @@ let filePaths = [];
 let lastLogCount = 0;
 let pollingInterval = null;
 
-// === INIT ===
-document.addEventListener('DOMContentLoaded', async () => {
-    // Загрузка логотипа (base64 data URI — работает везде)
+// === INIT (ждём готовности pywebview) ===
+window.addEventListener('pywebviewready', async () => {
+    // Загрузка логотипа (base64 data URI)
     try {
-        const resp = await fetch(`${API_BASE}/logo`);
-        const data = await resp.json();
+        const data = await pywebview.api.get_logo();
         if (data.data_uri) {
             document.getElementById('logo-img').src = data.data_uri;
         }
@@ -23,20 +19,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Проверка зависимостей
     try {
-        const resp = await fetch(`${API_BASE}/check-dependencies`);
-        const deps = await resp.json();
+        const deps = await pywebview.api.check_dependencies();
         if (!deps.success) {
             addLog(deps.message, 'red');
             addLog(`Путь к файлу: ${deps.path}`, 'orange');
         }
     } catch (e) {
-        addLog('Ошибка подключения к серверу', 'red');
+        addLog('Ошибка инициализации', 'red');
     }
 
     // Проверка БД
     try {
-        const resp = await fetch(`${API_BASE}/test-db`);
-        const dbTest = await resp.json();
+        const dbTest = await pywebview.api.test_db_connection();
         if (dbTest.success) {
             setTimeout(() => addLog('Готов к запуску...', 'green'), 500);
         } else if (dbTest.error) {
@@ -50,21 +44,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     startLogPolling();
 });
 
-// === POLLING ===
+// === POLLING (напрямую через pywebview.api) ===
 function startLogPolling() {
     pollingInterval = setInterval(async () => {
         try {
-            const resp = await fetch(`${API_BASE}/logs`);
-            const data = await resp.json();
+            const logs = await pywebview.api.get_logs();
 
             // Добавляем только новые логи
-            const newLogs = data.logs.slice(lastLogCount);
+            const newLogs = logs.slice(lastLogCount);
             newLogs.forEach(log => addLog(log.message, log.color));
-            lastLogCount = data.logs.length;
+            lastLogCount = logs.length;
 
             // Проверка статуса
-            const statusResp = await fetch(`${API_BASE}/status`);
-            const status = await statusResp.json();
+            const status = await pywebview.api.get_status();
 
             if (!status.is_processing && isProcessing) {
                 isProcessing = false;
@@ -77,26 +69,15 @@ function startLogPolling() {
                 }
             }
         } catch (e) {
-            // Сервер может быть временно недоступен
+            // API может быть временно недоступен
         }
     }, 500);
-}
-
-// === HELPERS ===
-async function apiPost(endpoint, body = null) {
-    const options = { method: 'POST' };
-    if (body !== null) {
-        options.headers = { 'Content-Type': 'application/json' };
-        options.body = JSON.stringify(body);
-    }
-    const resp = await fetch(`${API_BASE}${endpoint}`, options);
-    return await resp.json();
 }
 
 // === FILE SELECTION ===
 async function selectFiles() {
     try {
-        const result = await apiPost('/select-files', { name: 'отчетов' });
+        const result = await pywebview.api.select_files('отчетов');
 
         if (result.success) {
             filePaths = result.paths;
@@ -129,7 +110,6 @@ async function startProcessing() {
     }
 
     const options = {
-        file_paths: paths,
         dse_order: document.getElementById('chk-dse').checked,
         bam_parser: document.getElementById('chk-bam').checked,
         generate_table: document.getElementById('chk-result').checked,
@@ -148,7 +128,7 @@ async function startProcessing() {
     isProcessing = true;
 
     try {
-        const result = await apiPost('/start-processing', options);
+        const result = await pywebview.api.start_processing(paths, options);
 
         if (!result.success) {
             addLog('Ошибка запуска обработки', 'red');
@@ -169,7 +149,7 @@ function resetProcessingUI() {
 
 async function stopProcessing() {
     try {
-        await apiPost('/stop-processing');
+        await pywebview.api.stop_processing();
         document.getElementById('btn-stop').style.display = 'none';
     } catch (e) {
         addLog('Ошибка остановки', 'red');
@@ -179,8 +159,7 @@ async function stopProcessing() {
 // === RESULT ===
 async function openResult() {
     try {
-        const resp = await fetch(`${API_BASE}/open-result`);
-        const result = await resp.json();
+        const result = await pywebview.api.open_result_file();
         if (!result.success) {
             addLog(result.error || 'Ошибка при открытии файла', 'red');
         }
@@ -198,8 +177,7 @@ async function toggleWorkTable() {
         isTableOpen = false;
     } else {
         try {
-            const resp = await fetch(`${API_BASE}/table-data`);
-            const result = await resp.json();
+            const result = await pywebview.api.get_table_data();
             renderTable(result.headers, result.data);
             modal.style.display = 'flex';
             isTableOpen = true;
@@ -234,8 +212,7 @@ function escapeHtml(str) {
 // === HELP ===
 async function openHelp() {
     try {
-        const resp = await fetch(`${API_BASE}/help-text`);
-        const result = await resp.json();
+        const result = await pywebview.api.get_help_text();
         document.getElementById('help-text').textContent = result.text;
         document.getElementById('help-modal').style.display = 'flex';
     } catch (e) {
@@ -289,18 +266,14 @@ window.addEventListener('beforeunload', () => {
 });
 
 // ============================================================
-// === WINDOW CONTROLS (pywebview js_api: WindowApi в main.py)
+// === WINDOW CONTROLS (Api в main.py)
 // ============================================================
-function hasPyWebview() {
-    return typeof window.pywebview !== 'undefined' && window.pywebview.api;
-}
-
 function minimizeWindow() {
-    if (hasPyWebview()) pywebview.api.minimize();
+    pywebview.api.minimize_window();
 }
 
 function closeWindow() {
-    if (hasPyWebview()) pywebview.api.close_app();
+    pywebview.api.close_window();
 }
 
 // === ПЕРЕТАСКИВАНИЕ ОКНА ЗА SETTINGS-TOP-BAR (frameless) ===
@@ -313,7 +286,6 @@ function closeWindow() {
     dragBar.addEventListener('mousedown', (e) => {
         // Не начинаем drag при клике на кнопки
         if (e.target.closest('button')) return;
-        if (!hasPyWebview()) return;
         dragging = true;
         pywebview.api.drag_start(e.screenX, e.screenY);
     });
