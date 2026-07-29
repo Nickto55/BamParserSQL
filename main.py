@@ -18,6 +18,62 @@ SPLASH_MIN_TIME = 1.8
 SERVER_TIMEOUT = 30
 
 
+class WindowApi:
+    """
+    JS-API для управления окном из фронтенда.
+    Методы доступны в JS как pywebview.api.<method>()
+    """
+
+    def __init__(self):
+        self.window = None
+        self._pos = {'x': None, 'y': None}
+        self._drag = None
+
+    def attach(self, window):
+        """Привязка окна и подписка на события перемещения"""
+        self.window = window
+        try:
+            window.events.moved += self._on_moved
+        except Exception:
+            pass
+
+    def _on_moved(self, x, y):
+        self._pos['x'] = x
+        self._pos['y'] = y
+
+    # --- Управление окном ---
+
+    def minimize(self):
+        if self.window:
+            self.window.minimize()
+
+    def close_app(self):
+        if self.window:
+            self.window.destroy()
+
+    # --- Перетаскивание frameless-окна ---
+
+    def _current_pos(self):
+        x, y = self._pos['x'], self._pos['y']
+        if x is None:
+            x = getattr(self.window, 'x', None)
+            y = getattr(self.window, 'y', None)
+        return x, y
+
+    def drag_start(self, sx, sy):
+        x, y = self._current_pos()
+        if x is not None:
+            self._drag = (sx, sy, x, y)
+
+    def drag_move(self, sx, sy):
+        if self._drag and self.window:
+            sx0, sy0, wx, wy = self._drag
+            self.window.move(int(wx + (sx - sx0)), int(wy + (sy - sy0)))
+
+    def drag_end(self):
+        self._drag = None
+
+
 def get_web_dir():
     """Путь к папке web (с учётом PyInstaller)"""
     if hasattr(sys, '_MEIPASS'):
@@ -71,6 +127,9 @@ def main():
     web_dir = get_web_dir()
     splash_path = os.path.join(web_dir, 'splash.html')
 
+    # JS-API для кнопок окна (свернуть / закрыть / перетаскивание)
+    window_api = WindowApi()
+
     # Окно сразу открывает сплэш — мгновенный отклик для пользователя
     window = webview.create_window(
         title='SQL Order Engine',
@@ -79,8 +138,11 @@ def main():
         height=780,
         min_size=(900, 600),
         text_select=True,
-        confirm_close=False
+        confirm_close=False,
+        frameless=True,  # кастомный тайтлбар — кнопки в settings-top-bar
+        js_api=window_api
     )
+    window_api.attach(window)
 
     # Сервер поднимаем ПОСЛЕ старта GUI-цикла — сплэш уже на экране
     webview.start(
