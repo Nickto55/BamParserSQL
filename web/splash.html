@@ -25,6 +25,25 @@
         justify-content: center;
     }
 
+    /* кнопка закрытия (окно frameless) */
+    .splash-close {
+        position: fixed;
+        top: 0;
+        right: 0;
+        padding: 8px 16px;
+        background: transparent;
+        border: none;
+        color: #4d7d8a;
+        font-size: 14px;
+        cursor: pointer;
+        transition: all 0.2s;
+        z-index: 10;
+    }
+    .splash-close:hover {
+        background: rgba(250, 39, 39, 0.66);
+        color: #e8fbfd;
+    }
+
     /* фоновые свечения */
     .glow {
         position: fixed;
@@ -206,6 +225,8 @@
 </style>
 </head>
 <body>
+    <button class="splash-close" onclick="closeApp()" title="Закрыть">✕</button>
+
     <div class="glow glow-1"></div>
     <div class="glow glow-2"></div>
     <div class="beam"></div>
@@ -231,6 +252,13 @@
     <div class="version">v2.0 WEB</div>
 
 <script>
+    // Закрытие приложения (окно frameless — WindowApi из main.py)
+    function closeApp() {
+        if (typeof window.pywebview !== 'undefined' && window.pywebview.api) {
+            window.pywebview.api.close_app();
+        }
+    }
+
     // Смена статусных сообщений — чисто визуально, реальным переключением
     // управляет main.py (load_url при готовности сервера)
     (function () {
