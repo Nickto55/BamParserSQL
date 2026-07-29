@@ -4,7 +4,6 @@ import sys
 import time
 import threading
 import urllib.request
-import random
 
 from pathlib import Path
 from backend import Backend
@@ -14,16 +13,8 @@ from api_server import start_server
 API_PORT = 8765
 API_URL = f'http://127.0.0.1:{API_PORT}/api'
 
-
-if getattr(sys, 'frozen', False):
-    BASE_DIR = Path(sys._MEIPASS)
-else:
-    BASE_DIR = Path(__file__).parent
-
-ICON_PATH = BASE_DIR / "static" / "icons" / "dse-orger-manager.ico"
-
-# Минимальное время показа сплэш-экрана (сек) — чтобы анимация успела сыграть
-SPLASH_MIN_TIME = 1.8
+# Минимальное время показа сплэш-экрана (сек)
+SPLASH_MIN_TIME = 5.0
 # Максимальное ожидание готовности сервера (сек)
 SERVER_TIMEOUT = 30
 
@@ -58,8 +49,12 @@ class WindowApi:
             self.window.minimize()
 
     def close_app(self):
-        if self.window:
-            self.window.destroy()
+        """Закрыть приложение целиком (все окна)"""
+        for w in list(webview.windows):
+            try:
+                w.destroy()
+            except Exception:
+                pass
 
     # --- Перетаскивание frameless-окна ---
 
@@ -104,10 +99,10 @@ def wait_for_server(timeout=SERVER_TIMEOUT):
     return False
 
 
-def boot(window, backend, web_dir, started_at):
+def boot(splash, main_window, backend, started_at):
     """
     Фоновая загрузка: поднимаем сервер, ждём его готовности,
-    затем переключаем окно со сплэша на основной интерфейс.
+    затем закрываем сплэш и показываем главное окно.
     """
     # Запускаем API сервер
     start_server(backend, port=API_PORT)
@@ -120,60 +115,32 @@ def boot(window, backend, web_dir, started_at):
     if elapsed < SPLASH_MIN_TIME:
         time.sleep(SPLASH_MIN_TIME - elapsed)
 
-    # Переключаемся на основной интерфейс
-    index_path = os.path.join(web_dir, 'index.html')
-    window.load_url(f'file:///{index_path.replace(os.sep, "/")}')
+    # Закрываем сплэш и показываем главное окно
+    try:
+        splash.destroy()
+    except Exception:
+        pass
+    main_window.show()
+    main_window.restore()
 
     if not server_ok:
         print('[SQL Order Engine] ВНИМАНИЕ: сервер не ответил вовремя')
 
 
-# def main():
-#     started_at = time.time()
-#
-#     # Создаём бэкенд
-#     backend = Backend()
-#
-#     web_dir = get_web_dir()
-#     splash_path = os.path.join(web_dir, 'splash.html')
-#
-#     # JS-API для кнопок окна (свернуть / закрыть / перетаскивание)
-#     window_api = WindowApi()
-#
-#     # Окно сразу открывает сплэш — мгновенный отклик для пользователя
-#     window = webview.create_window(
-#         title='SQL Order Engine',
-#         url=f'file:///{splash_path.replace(os.sep, "/")}',
-#         width=1250,
-#         height=780,
-#         min_size=(900, 600),
-#         text_select=True,
-#         confirm_close=False,
-#         frameless=True,  # кастомный тайтлбар — кнопки в settings-top-bar
-#         js_api=window_api
-#     )
-#     window_api.attach(window)
-#
-#     # Сервер поднимаем ПОСЛЕ старта GUI-цикла — сплэш уже на экране
-#     webview.start(
-#         boot,
-#         args=(window, backend, web_dir, started_at),
-#         debug=True,  # True для отладки (откроет DevTools)
-#         gui='edgechromium'  # edgechromium на Windows, cocoa на macOS, gtk на Linux
-#     )
-
-
 def main():
     started_at = time.time()
 
+    # Создаём бэкенд
     backend = Backend()
 
     web_dir = get_web_dir()
     splash_path = os.path.join(web_dir, 'splash.html')
     main_path = os.path.join(web_dir, 'index.html')
 
+    # JS-API для кнопок окна (свернуть / закрыть / перетаскивание)
     window_api = WindowApi()
 
+    # Сплэш-окно: маленькое, поверх всех, без рамки
     splash = webview.create_window(
         title='SQL Order Engine',
         url=str(splash_path),
@@ -182,26 +149,11 @@ def main():
         resizable=False,
         frameless=True,
         on_top=True,
-        confirm_close=False
+        confirm_close=False,
+        js_api=window_api  # кнопка ✕ на сплэше вызывает close_app
     )
 
-    # window = webview.create_window(
-    #     title='SQL Order Engine',
-    #     url=f'file:///{splash_path.replace(os.sep, "/")}',
-    #     width=1250,
-    #     height=780,
-    #     min_size=(900, 600),
-    #     text_select=True,
-    #     confirm_close=False
-    # )
-    
-    # # Сервер поднимаем ПОСЛЕ старта GUI-цикла — сплэш уже на экране
-    # webview.start(
-    #     boot,
-    #     args=(window, backend, web_dir, started_at),
-    #     debug=True,  # True для отладки (откроет DevTools)
-    #     gui='edgechromium'  # edgechromium на Windows, cocoa на macOS, gtk на Linux
-    # )
+    # Главное окно: скрыто до готовности сервера
     main_window = webview.create_window(
         title='SQL Order Engine',
         url=str(main_path),
@@ -213,24 +165,16 @@ def main():
         hidden=True,
         js_api=window_api
     )
+    window_api.attach(main_window)
 
-    # window_api.attach(main_window)
-
-    def on_loaded():
-        time_sleep_main_window = random.randint(5, 7)
-        time.sleep(time_sleep_main_window)
-        splash.destroy()
-        main_window.show()
-        main_window.restore()
-
-    main_window.events.loaded += on_loaded
-
+    # Сервер и переключение окон — ПОСЛЕ старта GUI-цикла
     webview.start(
         boot,
-        icon=str(ICON_PATH),
-        args=(main_window, backend, web_dir, started_at),
-        debug=True
+        args=(splash, main_window, backend, started_at),
+        debug=True,  # True для отладки (откроет DevTools)
+        gui='edgechromium'  # edgechromium на Windows, cocoa на macOS, gtk на Linux
     )
+
 
 if __name__ == '__main__':
     main()
