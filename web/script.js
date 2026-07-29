@@ -287,3 +287,47 @@ window.addEventListener('beforeunload', () => {
         clearInterval(pollingInterval);
     }
 });
+
+// ============================================================
+// === WINDOW CONTROLS (pywebview js_api: WindowApi в main.py)
+// ============================================================
+function hasPyWebview() {
+    return typeof window.pywebview !== 'undefined' && window.pywebview.api;
+}
+
+function minimizeWindow() {
+    if (hasPyWebview()) pywebview.api.minimize();
+}
+
+function closeWindow() {
+    if (hasPyWebview()) pywebview.api.close_app();
+}
+
+// === ПЕРЕТАСКИВАНИЕ ОКНА ЗА SETTINGS-TOP-BAR (frameless) ===
+(function initWindowDrag() {
+    const dragBar = document.querySelector('.settings-top-bar');
+    if (!dragBar) return;
+
+    let dragging = false;
+
+    dragBar.addEventListener('mousedown', (e) => {
+        // Не начинаем drag при клике на кнопки
+        if (e.target.closest('button')) return;
+        if (!hasPyWebview()) return;
+        dragging = true;
+        pywebview.api.drag_start(e.screenX, e.screenY);
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (dragging) {
+            pywebview.api.drag_move(e.screenX, e.screenY);
+        }
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (dragging) {
+            dragging = false;
+            pywebview.api.drag_end();
+        }
+    });
+})();
