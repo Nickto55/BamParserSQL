@@ -14,9 +14,13 @@ API_PORT = 8765
 API_URL = f'http://127.0.0.1:{API_PORT}/api'
 
 # Минимальное время показа сплэш-экрана (сек)
-SPLASH_MIN_TIME = 40.0
+SPLASH_MIN_TIME = 3.0
 # Максимальное ожидание готовности сервера (сек)
 SERVER_TIMEOUT = 30
+
+# Размеры окон
+SPLASH_SIZE = (400, 500)
+MAIN_SIZE = (950, 730)
 
 
 class WindowApi:
@@ -42,7 +46,6 @@ class WindowApi:
         self._pos['x'] = x
         self._pos['y'] = y
 
-
     def minimize(self):
         if self.window:
             self.window.minimize()
@@ -54,7 +57,6 @@ class WindowApi:
                 w.destroy()
             except Exception:
                 pass
-
 
     def _current_pos(self):
         x, y = self._pos['x'], self._pos['y']
@@ -84,6 +86,16 @@ def get_web_dir():
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'web')
 
 
+def get_screen_size():
+    """Размер экрана (Windows -> ctypes, иначе запасной вариант)"""
+    try:
+        import ctypes
+        return (ctypes.windll.user32.GetSystemMetrics(0),
+                ctypes.windll.user32.GetSystemMetrics(1))
+    except Exception:
+        return 1920, 1080
+
+
 def wait_for_server(timeout=SERVER_TIMEOUT):
     """Ждём, пока API-сервер начнёт отвечать"""
     start = time.time()
@@ -97,39 +109,35 @@ def wait_for_server(timeout=SERVER_TIMEOUT):
     return False
 
 
-def boot(splash, backend, web_dir, window_api, started_at):
+def boot(window, backend, web_dir, started_at):
     """
     Фоновая загрузка: поднимаем сервер, ждём его готовности,
-    создаём главное окно (УЖЕ с готовым бэкендом) и закрываем сплэш.
+    затем ЭТО ЖЕ окно расширяем до основного размера и грузим интерфейс.
     """
-
     start_server(backend, port=API_PORT)
 
     server_ok = wait_for_server()
 
-
+    # Держим сплэш минимум SPLASH_MIN_TIME
     elapsed = time.time() - started_at
     if elapsed < SPLASH_MIN_TIME:
         time.sleep(SPLASH_MIN_TIME - elapsed)
 
-
-    main_path = os.path.join(web_dir, 'index.html')
-    main_window = webview.create_window(
-        title='SQL Order Engine',
-        url=str(main_path),
-        width=950,
-        height=730,
-        resizable=False,
-        frameless=True,
-        text_select=False,
-        js_api=window_api
-    )
-    window_api.attach(main_window)
-
+    # Расширяем окно до основного размера и центрируем
     try:
-        splash.destroy()
-    except Exception:
-        pass
+        w, h = MAIN_SIZE
+        sw, sh = get_screen_size()
+        window.resize(w, h)
+        window.move((sw - w) // 2, (sh - h) // 2)
+    except Exception as e:
+        print(f'[SQL Order Engine] Не удалось изменить размер окна: {e}')
+
+    # Грузим основной интерфейс в то же окно.
+    # ВАЖНО: не создаём второе окно из этого потока — на WinForms/edgechromium
+    # это приводит к дедлоку (exit code -805306369) и ошибке рекурсии
+    # AccessibilityObject.Bounds в мосте JS-API.
+    index_path = os.path.join(web_dir, 'index.html')
+    window.load_url(f'file:///{index_path.replace(os.sep, "/")}')
 
     if not server_ok:
         print('[SQL Order Engine] ВНИМАНИЕ: сервер не ответил вовремя')
@@ -143,25 +151,29 @@ def main():
     web_dir = get_web_dir()
     splash_path = os.path.join(web_dir, 'splash.html')
 
+    # JS-API для кнопок окна (свернуть / закрыть / перетаскивание)
     window_api = WindowApi()
 
-    splash = webview.create_window(
+    # ЕДИНСТВЕННОЕ окно: стартует как сплэш, затем трансформируется в главное
+    window = webview.create_window(
         title='SQL Order Engine',
         url=str(splash_path),
-        width=400,
-        height=500,
+        width=SPLASH_SIZE[0],
+        height=SPLASH_SIZE[1],
         resizable=False,
         frameless=True,
-        on_top=True,
+        text_select=False,
         confirm_close=False,
         js_api=window_api
     )
+    window_api.attach(window)
 
+    # Сервер и переключение интерфейса — ПОСЛЕ старта GUI-цикла
     webview.start(
         boot,
-        args=(splash, backend, web_dir, window_api, started_at),
-        debug=True,
-        gui='edgechromium'
+        args=(window, backend, web_dir, started_at),
+        debug=True,  # True для отладки (откроет DevTools)
+        gui='edgechromium'  # edgechromium на Windows, cocoa на macOS, gtk на Linux
     )
 
 
