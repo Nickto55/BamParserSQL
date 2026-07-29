@@ -14,7 +14,7 @@ API_PORT = 8765
 API_URL = f'http://127.0.0.1:{API_PORT}/api'
 
 # Минимальное время показа сплэш-экрана (сек)
-SPLASH_MIN_TIME = 5.0
+SPLASH_MIN_TIME = 3.0
 # Максимальное ожидание готовности сервера (сек)
 SERVER_TIMEOUT = 30
 
@@ -99,10 +99,10 @@ def wait_for_server(timeout=SERVER_TIMEOUT):
     return False
 
 
-def boot(splash, main_window, backend, started_at):
+def boot(splash, backend, web_dir, window_api, started_at):
     """
     Фоновая загрузка: поднимаем сервер, ждём его готовности,
-    затем закрываем сплэш и показываем главное окно.
+    создаём главное окно (УЖЕ с готовым бэкендом) и закрываем сплэш.
     """
     # Запускаем API сервер
     start_server(backend, port=API_PORT)
@@ -115,13 +115,27 @@ def boot(splash, main_window, backend, started_at):
     if elapsed < SPLASH_MIN_TIME:
         time.sleep(SPLASH_MIN_TIME - elapsed)
 
-    # Закрываем сплэш и показываем главное окно
+    # Главное окно создаём ПОСЛЕ готовности сервера — фронт сразу получает API.
+    # Окно hidden=True НЕ используем: он вызывает баг pywebview
+    # (maximum recursion depth exceeded в AccessibilityObject на WinForms)
+    main_path = os.path.join(web_dir, 'index.html')
+    main_window = webview.create_window(
+        title='SQL Order Engine',
+        url=str(main_path),
+        width=950,
+        height=730,
+        resizable=False,
+        frameless=True,
+        text_select=False,
+        js_api=window_api
+    )
+    window_api.attach(main_window)
+
+    # Закрываем сплэш
     try:
         splash.destroy()
     except Exception:
         pass
-    main_window.show()
-    main_window.restore()
 
     if not server_ok:
         print('[SQL Order Engine] ВНИМАНИЕ: сервер не ответил вовремя')
@@ -135,12 +149,12 @@ def main():
 
     web_dir = get_web_dir()
     splash_path = os.path.join(web_dir, 'splash.html')
-    main_path = os.path.join(web_dir, 'index.html')
 
     # JS-API для кнопок окна (свернуть / закрыть / перетаскивание)
     window_api = WindowApi()
 
-    # Сплэш-окно: маленькое, поверх всех, без рамки
+    # Сплэш-окно: маленькое, поверх всех, без рамки.
+    # Главное окно создаётся позже в boot() — после готовности сервера.
     splash = webview.create_window(
         title='SQL Order Engine',
         url=str(splash_path),
@@ -153,24 +167,10 @@ def main():
         js_api=window_api  # кнопка ✕ на сплэше вызывает close_app
     )
 
-    # Главное окно: скрыто до готовности сервера
-    main_window = webview.create_window(
-        title='SQL Order Engine',
-        url=str(main_path),
-        width=950,
-        height=730,
-        resizable=False,
-        frameless=True,
-        text_select=False,
-        hidden=True,
-        js_api=window_api
-    )
-    window_api.attach(main_window)
-
-    # Сервер и переключение окон — ПОСЛЕ старта GUI-цикла
+    # Сервер и создание главного окна — ПОСЛЕ старта GUI-цикла
     webview.start(
         boot,
-        args=(splash, main_window, backend, started_at),
+        args=(splash, backend, web_dir, window_api, started_at),
         debug=True,  # True для отладки (откроет DevTools)
         gui='edgechromium'  # edgechromium на Windows, cocoa на macOS, gtk на Linux
     )
