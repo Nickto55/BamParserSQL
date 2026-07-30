@@ -1,0 +1,302 @@
+// === STATE ===
+let isProcessing = false;
+let isTableOpen = false;
+let filePaths = [];
+let lastLogCount = 0;
+let pollingInterval = null;
+
+// === INIT (ждём готовности pywebview) ===
+window.addEventListener('pywebviewready', async () => {
+    // Загрузка логотипа (base64 data URI)
+    try {
+        const data = await pywebview.api.get_logo();
+        if (data.data_uri) {
+            document.getElementById('logo-img').src = data.data_uri;
+        }
+    } catch (e) {
+        console.error('Logo load error:', e);
+    }
+
+    // Проверка зависимостей
+    try {
+        const deps = await pywebview.api.check_dependencies();
+        if (!deps.success) {
+            addLog(deps.message, 'red');
+            addLog(`Путь к файлу: ${deps.path}`, 'orange');
+        }
+    } catch (e) {
+        addLog('Ошибка инициализации', 'red');
+    }
+
+    // Проверка БД
+    try {
+        const dbTest = await pywebview.api.test_db_connection();
+        if (dbTest.success) {
+            setTimeout(() => addLog('Готов к запуску...', 'green'), 500);
+        } else if (dbTest.error) {
+            addLog(`БД: ${dbTest.error}`, 'red');
+        }
+    } catch (e) {
+        console.error('DB test error:', e);
+    }
+
+    // Запуск polling логов
+    startLogPolling();
+});
+
+// === POLLING (напрямую через pywebview.api) ===
+function startLogPolling() {
+    pollingInterval = setInterval(async () => {
+        try {
+            const logs = await pywebview.api.get_logs();
+
+            // Добавляем только новые логи
+            const newLogs = logs.slice(lastLogCount);
+            newLogs.forEach(log => addLog(log.message, log.color));
+            lastLogCount = logs.length;
+
+            // Проверка статуса
+            const status = await pywebview.api.get_status();
+
+            if (!status.is_processing && isProcessing) {
+                isProcessing = false;
+                document.getElementById('btn-start').disabled = false;
+                document.getElementById('btn-stop').style.display = 'none';
+                document.getElementById('progress-container').style.display = 'none';
+
+                if (status.path_outfile) {
+                    document.getElementById('btn-result').style.display = 'inline-block';
+                }
+            }
+        } catch (e) {
+            // API может быть временно недоступен
+        }
+    }, 500);
+}
+
+// === FILE SELECTION ===
+async function selectFiles() {
+    try {
+        const result = await pywebview.api.select_files('отчетов');
+
+        if (result.success) {
+            filePaths = result.paths;
+            document.getElementById('file-path').value = result.str_paths;
+            document.getElementById('file-name').value = result.name;
+            document.getElementById('file-name').style.color = '#e8fbfd';
+            addLog('<Установлен путь для файла отчетов>', 'muted');
+            document.getElementById('file-path').classList.remove('error');
+            document.getElementById('file-name').classList.remove('error');
+        }
+    } catch (e) {
+        addLog('Ошибка выбора файлов', 'red');
+    }
+}
+
+// === PROCESSING ===
+async function startProcessing() {
+    const pathInput = document.getElementById('file-path').value.trim();
+
+    // Приоритет — файлы из диалога, иначе парсим введённый путь
+    let paths = filePaths.length ? filePaths : [];
+    if (!paths.length && pathInput) {
+        paths = pathInput.split(/[,;]+/).map(s => s.trim()).filter(Boolean);
+    }
+
+    if (!paths.length) {
+        addLog('Ошибка, укажите путь к файлу', 'red');
+        document.getElementById('file-path').classList.add('error');
+        return;
+    }
+
+    const options = {
+        dse_order: document.getElementById('chk-dse').checked,
+        bam_parser: document.getElementById('chk-bam').checked,
+        generate_table: document.getElementById('chk-result').checked,
+        query_split: parseInt(document.querySelector('input[name="query-split"]:checked').value),
+        error_handler: true
+    };
+
+    // Сброс UI
+    document.getElementById('status-text').innerHTML = '';
+    lastLogCount = 0;
+    document.getElementById('btn-result').style.display = 'none';
+    document.getElementById('btn-start').disabled = true;
+    document.getElementById('btn-stop').style.display = 'inline-block';
+    document.getElementById('progress-container').style.display = 'block';
+
+    isProcessing = true;
+
+    try {
+        const result = await pywebview.api.start_processing(paths, options);
+
+        if (!result.success) {
+            addLog('Ошибка запуска обработки', 'red');
+            resetProcessingUI();
+        }
+    } catch (e) {
+        addLog('Ошибка запуска: ' + e.message, 'red');
+        resetProcessingUI();
+    }
+}
+
+function resetProcessingUI() {
+    isProcessing = false;
+    document.getElementById('btn-start').disabled = false;
+    document.getElementById('btn-stop').style.display = 'none';
+    document.getElementById('progress-container').style.display = 'none';
+}
+
+async function stopProcessing() {
+    try {
+        await pywebview.api.stop_processing();
+        document.getElementById('btn-stop').style.display = 'none';
+    } catch (e) {
+        addLog('Ошибка остановки', 'red');
+    }
+}
+
+// === RESULT ===
+async function openResult() {
+    try {
+        const result = await pywebview.api.open_result_file();
+        if (!result.success) {
+            addLog(result.error || 'Ошибка при открытии файла', 'red');
+        }
+    } catch (e) {
+        addLog('Ошибка открытия файла', 'red');
+    }
+}
+
+// === TABLE ===
+async function toggleWorkTable() {
+    const modal = document.getElementById('table-modal');
+
+    if (isTableOpen) {
+        modal.style.display = 'none';
+        isTableOpen = false;
+    } else {
+        try {
+            const result = await pywebview.api.get_table_data();
+            renderTable(result.headers, result.data);
+            modal.style.display = 'flex';
+            isTableOpen = true;
+        } catch (e) {
+            addLog('Ошибка загрузки таблицы', 'red');
+        }
+    }
+}
+
+function renderTable(headers, data) {
+    const thead = document.getElementById('table-head');
+    const tbody = document.getElementById('table-body');
+
+    thead.innerHTML = `<tr>${headers.map(h => `<th>${escapeHtml(h)}</th>`).join('')}</tr>`;
+
+    if (!data.length) {
+        tbody.innerHTML = `<tr><td colspan="${headers.length}" style="text-align:center;color:var(--text-muted);padding:24px;">Нет данных</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = data.map(row =>
+        `<tr>${headers.map(h => `<td>${escapeHtml(String(row[h] ?? ''))}</td>`).join('')}</tr>`
+    ).join('');
+}
+
+function escapeHtml(str) {
+    return str.replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[ch]));
+}
+
+// === HELP ===
+async function openHelp() {
+    try {
+        const result = await pywebview.api.get_help_text();
+        document.getElementById('help-text').textContent = result.text;
+        document.getElementById('help-modal').style.display = 'flex';
+    } catch (e) {
+        addLog('Ошибка загрузки справки', 'red');
+    }
+}
+
+function closeHelp() {
+    document.getElementById('help-modal').style.display = 'none';
+}
+
+// === LOGS ===
+function addLog(message, color = null) {
+    const container = document.getElementById('status-text');
+    const line = document.createElement('div');
+    line.className = 'log-line';
+    if (color) {
+        const colorMap = {
+            'red': 'log-red',
+            'green': 'log-green',
+            'orange': 'log-orange',
+            '#ff8d52': 'log-orange',
+            '#9aa5aa': 'log-muted',
+            '#788084': 'log-muted',
+            '#00aaff': 'log-blue',
+            'blue': 'log-blue',
+            'muted': 'log-muted'
+        };
+        line.classList.add(colorMap[color] || 'log-muted');
+    }
+    line.textContent = message;
+    container.appendChild(line);
+    container.scrollTop = container.scrollHeight;
+}
+
+// === CLOSE MODAL ON BACKDROP CLICK ===
+document.querySelectorAll('.modal').forEach(modal => {
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.style.display = 'none';
+            if (modal.id === 'table-modal') isTableOpen = false;
+        }
+    });
+});
+
+// === CLEANUP ===
+window.addEventListener('beforeunload', () => {
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+    }
+});
+
+// === WINDOW CONTROLS (Api в main.py)
+function minimizeWindow() {
+    pywebview.api.minimize_window();
+}
+
+function closeWindow() {
+    pywebview.api.close_window();
+}
+
+// === ПЕРЕТАСКИВАНИЕ ОКНА ЗА SETTINGS-TOP-BAR (frameless) ===
+(function initWindowDrag() {
+    const dragBar = document.querySelector('.settings-top-bar');
+    if (!dragBar) return;
+
+    let dragging = false;
+
+    dragBar.addEventListener('mousedown', (e) => {
+        if (e.target.closest('button')) return;
+        dragging = true;
+        pywebview.api.drag_start(e.screenX, e.screenY);
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (dragging) {
+            pywebview.api.drag_move(e.screenX, e.screenY);
+        }
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (dragging) {
+            dragging = false;
+            pywebview.api.drag_end();
+        }
+    });
+})();

@@ -6,8 +6,11 @@ class DseOrderLogic:
         self.list_path_to_replacce_tabel = None
 
     def main(self, path_to_replacce_tabel: str):
-        app = ScriptReplyTabel()
-        datas = app.main(path_to_replacce_tabel)
+        datas = ScriptReplyTabel().main(path_to_replacce_tabel)
 
         inserter = ExcelDataInserter(path_to_replacce_tabel)
         inserter.insert_data(datas, sheet_name="Изделия")
+
+if __name__=='__main__':
+    app = DseOrderLogic()
+    app.main(r'C:/Users/yakovlev_nd/Desktop/Tests/gfgdgssd/Новая папка/26,06,01-08,31 — копия (2) — копия — копия.xlsx')

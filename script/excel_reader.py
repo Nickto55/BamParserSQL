@@ -66,6 +66,8 @@ class ExcelReader:
 
     def _detect_format(self, file_path: str) -> str:
         """Определяет формат файла по расширению или бинарной сигнатуре."""
+        print(file_path)
+        print('+==================+')
         path = Path(file_path)
         ext = path.suffix.lower()
         if ext == ".xls":
@@ -98,6 +100,8 @@ class ExcelReader:
         color_col = color_filter_column or self.color_filter_column
         enc = encoding or self.encoding
         hdr = self.header_row
+        print(file_path)
+        print(self.file_path)
 
         # Определяем формат файла
         file_format = self._detect_format(path)

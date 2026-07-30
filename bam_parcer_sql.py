@@ -45,8 +45,8 @@ class SqlParserLogic:
     def main(
             self
             , file_path
-            , var_radiobutton_value_query_split: IntVar = None
-            , var_bool_error_handler_inside_request_for_swith: BooleanVar = True
+            , var_radiobutton_value_query_split: int = None
+            , var_bool_error_handler_inside_request_for_swith: bool = True
     ):
         data_result = {}
         self.file_path = file_path
@@ -55,9 +55,10 @@ class SqlParserLogic:
         self.var_bool_error_handler_inside_request_for_swith = var_bool_error_handler_inside_request_for_swith
 
         if pd.isna(var_radiobutton_value_query_split):
-            self.var_radiobutton_value_query_split = IntVar(value=1)
-        if self.var_radiobutton_value_query_split.get() == 1:
-            self.var_bool_error_handler_inside_request_for_swith = BooleanVar(value=True)
+            self.var_radiobutton_value_query_split = 1
+        print(self.var_radiobutton_value_query_split)
+        if self.var_radiobutton_value_query_split == 1:
+            self.var_bool_error_handler_inside_request_for_swith =True
 
         input_data = ExcelReader(file_path, sheet_name="Изделия")
         self.data_input_file = input_data.get_dict_all_data()
@@ -89,15 +90,15 @@ class SqlParserLogic:
             , line_target=5
         )
 
-        if estimated_running_program / 60 >= 30:
-            if CTkMessagebox(
-                    title="Продолжить?"
-                    ,
-                    message="Предполагаемое время работы программы, превышает 30 мин.\nЖелаете ли вы продолжить запуск"
-                    , option_2='Да'
-                    , option_1='Нет'
-            ).get() == 'Нет':
-                self.no_repeat = True
+        # if estimated_running_program / 60 >= 30:
+        #     if CTkMessagebox(
+        #             title="Продолжить?"
+        #             ,
+        #             message="Предполагаемое время работы программы, превышает 30 мин.\nЖелаете ли вы продолжить запуск"
+        #             , option_2='Да'
+        #             , option_1='Нет'
+        #     ).get() == 'Нет':
+        #         self.no_repeat = True
 
         if not self.no_repeat:
             len_data_dse = len(self.data_input_file)
@@ -123,9 +124,9 @@ class SqlParserLogic:
                     break
 
                 last_dse = False
-                if self.var_radiobutton_value_query_split.get() != 11:
-                    if num_row < last_num_row + self.var_radiobutton_value_query_split.get() -1:
-                        if len_data_dse > num_row + self.var_radiobutton_value_query_split.get():
+                if self.var_radiobutton_value_query_split != 11:
+                    if num_row < last_num_row + self.var_radiobutton_value_query_split -1:
+                        if len_data_dse > num_row + self.var_radiobutton_value_query_split:
                             list_dse.append(row_reply.get('Дсе', ''))
                             continue
                         elif len_data_dse - 1 > num_row:
@@ -155,13 +156,10 @@ class SqlParserLogic:
                     , mode='replace'
                 )
 
-                print(f'|{str_dse_count_value_query_split}|')
                 cmd_app = ScriptCmd()
                 list_dse_ctr = cmd_app.main(str_dse_count_value_query_split)
 
-                print(list_dse_ctr)
                 for dse_ctr in list_dse_ctr:
-                    print(dse_ctr)
                     try:
                         cmd_data.append(dse_ctr)
                         row_reply.update(
@@ -279,20 +277,13 @@ class SqlParserLogic:
 
 
 if __name__ == "__main__":
-    # path_file = input("Введите ссылку на файл отчета: ")
+    path_file = input("Введите ссылку на файл отчета: ")
     root = tk.Tk()
     # path_file = r"C:\Users\yakovlev_nd\Desktop\Tests\gfgdgssd\Новая папка\26,06,01-08,31 — копия (2) — копия — копия.xlsx"
-    path_file = r"C:\Users\yakovlev_nd\Desktop\Tests\gfgdgssd\Новая папка\26,06,01-08,31.xlsx"
+    # path_file = r"C:\Users\yakovlev_nd\Desktop\Tests\gfgdgssd\Новая папка\26,06,01-08,31.xlsx"
     app = SqlParserLogic()
     app.main(
         path_file
-        , var_radiobutton_value_query_split=IntVar(value=1)
-        , var_bool_error_handler_inside_request_for_swith=BooleanVar(value=False)
+        , var_radiobutton_value_query_split=1
+        , var_bool_error_handler_inside_request_for_swith=False
     )
-    # data = {
-    #     "":
-    # }.copy()
-    # print(data)
-    # inserter = ExcelDataInserter(path_file)
-    # inserter.insert_data(data, sheet_name="Изделия")
-    # input()

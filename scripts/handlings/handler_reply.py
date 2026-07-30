@@ -15,7 +15,7 @@ class HandlerReplyTabel:
         """
         return: Обычн
         """
-        self.read_excel= ExcelReader(path_to_reply_tabel, header_row=13, skip_sheet='Изделия')
+        self.read_excel= ExcelReader(path_to_reply_tabel, header_row=13,sheet_name='Лист_1')
         self.filter_data()
 
 

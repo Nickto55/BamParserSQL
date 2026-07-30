@@ -10,6 +10,7 @@ class ExcelDataInserter:
     """
 
     def __init__(self, file_path):
+        print(file_path)
         """
         :param file_path: Путь к существующему Excel-файлу
         """

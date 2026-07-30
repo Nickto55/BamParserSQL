@@ -1,3 +1,5 @@
+from urllib.request import install_opener
+
 import pandas as pd
 
 from scripts.handlings.handler_reply import HandlerReplyTabel

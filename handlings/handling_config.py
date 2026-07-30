@@ -57,5 +57,3 @@ class ConfigSQLRecvetions:
 
 if __name__ == "__main__":
     app = ConfigMainProgram()
-    print(app.get_all_config_program())
-    # app12.mainloop()
