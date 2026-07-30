@@ -32,11 +32,9 @@ class ScriptCmd:
         cursor = None
         try:
             self.log_program(f"Тестирование подключения к {self.sql_server}...")
-            # Ставим таймаут на подключение 5 секунд, чтобы скрипт не зависал долго
             conn = pyodbc.connect(conn_str, timeout=5)
             cursor = conn.cursor()
 
-            # Выполняем самый легкий тестовый запрос к системной переменной
             cursor.execute("SELECT @@VERSION")
             db_version = cursor.fetchone()[0]
 

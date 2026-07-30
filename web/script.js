@@ -265,9 +265,7 @@ window.addEventListener('beforeunload', () => {
     }
 });
 
-// ============================================================
 // === WINDOW CONTROLS (Api в main.py)
-// ============================================================
 function minimizeWindow() {
     pywebview.api.minimize_window();
 }
@@ -284,7 +282,6 @@ function closeWindow() {
     let dragging = false;
 
     dragBar.addEventListener('mousedown', (e) => {
-        // Не начинаем drag при клике на кнопки
         if (e.target.closest('button')) return;
         dragging = true;
         pywebview.api.drag_start(e.screenX, e.screenY);

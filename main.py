@@ -1,4 +1,3 @@
-import os
 import sys
 import time
 import random
@@ -40,7 +39,6 @@ class Api:
         self._pos['x'] = x
         self._pos['y'] = y
 
-    # ========== КНОПКИ ОКНА ==========
 
     def minimize_window(self):
         """Свернуть окно"""
@@ -57,8 +55,6 @@ class Api:
                 pass
         return True
 
-    # ========== ПЕРЕТАСКИВАНИЕ FRAMELESS-ОКНА ==========
-
     def drag_start(self, sx, sy):
         x, y = self._pos['x'], self._pos['y']
         if x is None:
@@ -74,8 +70,6 @@ class Api:
 
     def drag_end(self):
         self._drag = None
-
-    # ========== ПРОКСИ К BACKEND ==========
 
     def check_dependencies(self):
         return self.backend.check_dependencies()
@@ -122,7 +116,6 @@ def main():
     splash_path = WEB_DIR / "splash.html"
     main_path = WEB_DIR / "index.html"
 
-    # Сплэш-окно: маленькое, поверх всех, без рамки
     splash = webview.create_window(
         title='SQL Order Engine',
         url=str(splash_path),
@@ -132,10 +125,9 @@ def main():
         frameless=True,
         on_top=True,
         confirm_close=False,
-        js_api=api  # кнопка ✕ на сплэше вызывает close_window
+        js_api=api
     )
 
-    # Главное окно: скрыто до загрузки интерфейса
     main_window = webview.create_window(
         title='SQL Order Engine',
         url=str(main_path),
@@ -148,7 +140,6 @@ def main():
         hidden=True
     )
 
-    # Передаём ссылку на окно в API
     api.set_window(main_window)
 
     def on_loaded():
@@ -161,7 +152,7 @@ def main():
     main_window.events.loaded += on_loaded
 
     webview.start(
-        debug=True,  # True для отладки (откроет DevTools)
+        debug=False,
         gui='edgechromium'
     )
 

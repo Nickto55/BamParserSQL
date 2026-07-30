@@ -277,20 +277,13 @@ class SqlParserLogic:
 
 
 if __name__ == "__main__":
-    # path_file = input("Введите ссылку на файл отчета: ")
+    path_file = input("Введите ссылку на файл отчета: ")
     root = tk.Tk()
     # path_file = r"C:\Users\yakovlev_nd\Desktop\Tests\gfgdgssd\Новая папка\26,06,01-08,31 — копия (2) — копия — копия.xlsx"
-    path_file = r"C:\Users\yakovlev_nd\Desktop\Tests\gfgdgssd\Новая папка\26,06,01-08,31.xlsx"
+    # path_file = r"C:\Users\yakovlev_nd\Desktop\Tests\gfgdgssd\Новая папка\26,06,01-08,31.xlsx"
     app = SqlParserLogic()
     app.main(
         path_file
         , var_radiobutton_value_query_split=1
         , var_bool_error_handler_inside_request_for_swith=False
     )
-    # data = {
-    #     "":
-    # }.copy()
-    # print(data)
-    # inserter = ExcelDataInserter(path_file)
-    # inserter.insert_data(data, sheet_name="Изделия")
-    # input()

@@ -42,7 +42,6 @@ def checking_dependencies(log_callback=None):
 
 
 def get_resource_path(relative_path):
-    """ Возвращает абсолютный путь к ресурсу, учитывая сборку PyInstaller """
     if hasattr(sys, '_MEIPASS'):
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.join(os.path.abspath("."), relative_path)
@@ -369,28 +368,6 @@ class AppGui(ctk.CTk):
             , y=2 * self.height_row_in_frame - self.indent_frame
         )
 
-        # switch_error_handler_inside_request = ctk.CTkFrame(
-        #     side_bar_frame
-        #     , width=self.width_sidebar_frame - 2 * self.indent_frame
-        #     , height=self.height_row_in_frame + 2 * self.indent_frame
-        #     , fg_color='#1d1e1e'
-        # )
-        # switch_error_handler_inside_request.place(
-        #     x=self.indent_frame
-        #     , y=self.width_logo_sidebar_frame + 5 * self.height_row_in_frame + 16 * self.indent_frame
-        # )
-        #
-        # self.switch_handler_error_inside_requst = ctk.CTkSwitch(
-        #     switch_error_handler_inside_request
-        #     , text='Обработчик ошибок\n внутри запроса'
-        #     , variable=self.var_bool_error_handler_inside_request_for_swith
-        # )
-        # self.switch_handler_error_inside_requst.place(
-        #     x=self.indent_frame
-        #     , y=self.indent_frame
-        # )
-        # self.switch_handler_error_inside_requst.place_forget()
-
         button_help = ctk.CTkButton(
             side_bar_frame
             , width=self.width_sidebar_frame - 2 * self.indent_frame
@@ -537,10 +514,7 @@ class AppGui(ctk.CTk):
     def _error_handler_inside_request(self, param):
         if param == 1:
             self.var_bool_error_handler_inside_request_for_swith.set(True)
-            # self.switch_handler_error_inside_requst.update()
-            # self.switch_handler_error_inside_requst.configure(state='disabled')
-        # else:
-        #     self.switch_handler_error_inside_requst.configure(state="normal")
+
 
     def stop_execution(self):
         """Отправляет сигнал остановки в рабочий поток"""
@@ -740,67 +714,67 @@ class AppGui(ctk.CTk):
             , y=self.height_row_in_frame + 2 * self.indent_frame + 1
         )
 
-        # try:
-        self.path_outfile = None
-        if self.checkbox_dse_order.get() and self.checkbox_bam_parser.get():
-            manager = EngineLogic(
-                log_callback=self.log,
-                table_callback=self.table_callback,
-                stop_event=self.stop_event
-                , var_radiobutton_value_query_split=self.var_radiobutton_value_query_split
-                , var_bool_error_handler_inside_request_for_swith=self.var_bool_error_handler_inside_request_for_swith
-            )
-            manager.main(self.reply_path_entry.get())
-        elif self.checkbox_dse_order.get() and not self.checkbox_bam_parser.get():
-            manager = DseOrderLogic()
-            manager.main(self.reply_path_entry.get())
-        elif not self.checkbox_dse_order.get() and self.checkbox_bam_parser.get():
-            manager = SqlParserLogic(
-                log_callback=self.log,
-                table_callback=self.table_callback,
-                stop_event=self.stop_event
-            )
-            manager.main(self.reply_path_entry.get(), self.var_radiobutton_value_query_split,
-                         self.var_bool_error_handler_inside_request_for_swith)
-        else:
-            self.log(f'Произошла ошибка: {self.checkbox_dse_order.get()} {self.checkbox_bam_parser.get()}')
+        try:
+            self.path_outfile = None
+            if self.checkbox_dse_order.get() and self.checkbox_bam_parser.get():
+                manager = EngineLogic(
+                    log_callback=self.log,
+                    table_callback=self.table_callback,
+                    stop_event=self.stop_event
+                    , var_radiobutton_value_query_split=self.var_radiobutton_value_query_split
+                    , var_bool_error_handler_inside_request_for_swith=self.var_bool_error_handler_inside_request_for_swith
+                )
+                manager.main(self.reply_path_entry.get())
+            elif self.checkbox_dse_order.get() and not self.checkbox_bam_parser.get():
+                manager = DseOrderLogic()
+                manager.main(self.reply_path_entry.get())
+            elif not self.checkbox_dse_order.get() and self.checkbox_bam_parser.get():
+                manager = SqlParserLogic(
+                    log_callback=self.log,
+                    table_callback=self.table_callback,
+                    stop_event=self.stop_event
+                )
+                manager.main(self.reply_path_entry.get(), self.var_radiobutton_value_query_split,
+                             self.var_bool_error_handler_inside_request_for_swith)
+            else:
+                self.log(f'Произошла ошибка: {self.checkbox_dse_order.get()} {self.checkbox_bam_parser.get()}')
 
-        if self.checkbox_result.get():
-            result = TableTransformation(self.reply_path_entry.get())
-            result.main()
-        self.path_outfile = self.reply_path_entry.get()
-        self.button_open_result_tabel.place(
-            x=self.width_path_entry + 22
-            , y=self.height_row_in_frame + 2 * self.indent_frame + 1
-        )
-
-        if self.stop_event.is_set():
-            self.log("Процесс остановлен пользователем. Результат сохранён.", color_log="orange")
-            self.button_open_folder_reply.place(x=self.width_name_entry + self.width_path_entry + 3 * self.indent_frame,
-                                                y=self.indent_frame)
-        else:
-            self.log("Процесс успешно завершен.", color_log="green")
-            self.button_stop_program.place_forget()
-            self.button_open_folder_reply.place(x=self.width_name_entry + self.width_path_entry + 3 * self.indent_frame,
-                                                y=self.indent_frame)
-            send_notification(
-                "Программа завершена"
-                , "Программа завершена , проверте файл"
-                , self.name_program
-                , 16
+            if self.checkbox_result.get():
+                result = TableTransformation(self.reply_path_entry.get())
+                result.main()
+            self.path_outfile = self.reply_path_entry.get()
+            self.button_open_result_tabel.place(
+                x=self.width_path_entry + 22
+                , y=self.height_row_in_frame + 2 * self.indent_frame + 1
             )
 
-        self.start_button.configure(state="normal")
-        self.progress_bar.stop()
-        self.progress_bar.place_forget()
+            if self.stop_event.is_set():
+                self.log("Процесс остановлен пользователем. Результат сохранён.", color_log="orange")
+                self.button_open_folder_reply.place(x=self.width_name_entry + self.width_path_entry + 3 * self.indent_frame,
+                                                    y=self.indent_frame)
+            else:
+                self.log("Процесс успешно завершен.", color_log="green")
+                self.button_stop_program.place_forget()
+                self.button_open_folder_reply.place(x=self.width_name_entry + self.width_path_entry + 3 * self.indent_frame,
+                                                    y=self.indent_frame)
+                send_notification(
+                    "Программа завершена"
+                    , "Программа завершена , проверте файл"
+                    , self.name_program
+                    , 16
+                )
 
-        # except Exception as e:
-        #     self.log(f"\nERROR GUI:", color_log="red")
-        #     self.log(f" {str(e)}", color_log="red")
-        # finally:
-        self.start_button.configure(state="normal")
-        self.progress_bar.stop()
-        self.progress_bar.place_forget()
+            self.start_button.configure(state="normal")
+            self.progress_bar.stop()
+            self.progress_bar.place_forget()
+
+        except Exception as e:
+            self.log(f"\nERROR GUI:", color_log="red")
+            self.log(f" {str(e)}", color_log="red")
+        finally:
+            self.start_button.configure(state="normal")
+            self.progress_bar.stop()
+            self.progress_bar.place_forget()
 
 
 class TableWindow(ctk.CTkToplevel):
